@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_006';
+  const BUILD='v20260611_007';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -3607,6 +3607,13 @@ renderAll();ensureEditableContractFields();
   });
 
   window.renderDashboard=renderDash;
+
+  /* Render on load and periodically refresh while summary tab is visible */
+  setTimeout(renderDash, 800);
+  setInterval(function(){
+    var tab=document.getElementById('summaryTab');
+    if(tab&&!tab.classList.contains('hidden')) renderDash();
+  }, 5000);
 })();
 
 /* ── Follow Up Tab in Event Form ── */
