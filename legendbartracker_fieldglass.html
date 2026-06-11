@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_027';
+  const BUILD='v20260611_029';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -734,8 +734,8 @@ tr:hover td { background:var(--surface2); }
   <!-- Main content -->
   <div class="main-content">
 
-    <!-- Stats (Summary tab only) -->
-    <div class="stats">
+    <!-- Stats (Summary tab only) — hidden, replaced by dashboard KPI cards -->
+    <div class="stats" style="display:none!important">
       <div class="card stat"><div class="label">Customers</div><div class="value" id="statCustomers">0</div></div>
       <div class="card stat"><div class="label">Events</div><div class="value" id="statEvents">0</div></div>
       <div class="card stat"><div class="label">Quoted revenue</div><div class="value" id="statQuoted">$0</div></div>
@@ -3438,7 +3438,7 @@ renderAll();ensureEditableContractFields();
   var DASH_STYLES = `
   .db-wrap{font-family:inherit;}
   .db-section-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3,#888);margin:0 0 10px;}
-  .db-kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+  .db-kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:12px;margin-bottom:20px;}
   .db-kpi{background:var(--surface,#fff);border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:16px 18px;min-width:0;}
   .db-kpi-label{font-size:11px;font-weight:600;color:var(--ink3,#888);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
   .db-kpi-value{font-size:26px;font-weight:700;color:var(--ink,#0f172a);line-height:1;}
@@ -3524,6 +3524,18 @@ renderAll();ensureEditableContractFields();
     var openFollowUps=events.filter(function(e){return e.followUpDate&&(e.followUpStatus||'open')==='open';});
     var overdueFollowUps=openFollowUps.filter(function(e){return e.followUpDate<todayISO;});
 
+    /* Year-to-date KPIs */
+    var currentYear=now.getFullYear().toString();
+    var yearEvents=events.filter(function(e){ return e.date&&e.date.startsWith(currentYear); });
+    var revenueYTD=yearEvents.reduce(function(s,e){
+      return s+parseFloat(e.depositAmountPaid||0)+parseFloat(e.finalAmountPaid||0);
+    },0);
+    var costsYTD=yearEvents.reduce(function(s,e){
+      return s+parseFloat(e.eventCosts||0);
+    },0);
+    var netYTD=revenueYTD-costsYTD;
+    var marginYTD=revenueYTD>0?Math.round(netYTD/revenueYTD*100):null;
+
     /* Ad efficiency KPIs — lifetime totals */
     var allCompleted=events.filter(function(e){return e.status==='completed';});
     var allBookedOrCompleted=events.filter(function(e){return e.status==='booked'||e.status==='completed';});
@@ -3561,6 +3573,9 @@ renderAll();ensureEditableContractFields();
     html+='<div class="db-kpi yellow"><div class="db-kpi-label">Pending Collections</div><div class="db-kpi-value">'+fmt$(pendingCollections)+'</div><div class="db-kpi-sub">unpaid balances</div></div>';
     html+='<div class="db-kpi red"><div class="db-kpi-label">Open Follow-Ups</div><div class="db-kpi-value">'+openFollowUps.length+'</div><div class="db-kpi-sub">'+(overdueFollowUps.length?' ⚠ '+overdueFollowUps.length+' overdue':'all on track')+'</div></div>';
     html+='<div class="db-kpi" style="border-top:3px solid #8b5cf6;"><div class="db-kpi-label">Lifetime Ad Cost %</div><div class="db-kpi-value">'+(lifetimeAdPct!==null?lifetimeAdPct+'%':'—')+'</div><div class="db-kpi-sub">ad spend ÷ booked+completed quotes</div></div>';
+    html+='<div class="db-kpi" style="border-top:3px solid #0e7490;"><div class="db-kpi-label">Revenue This Year</div><div class="db-kpi-value">'+fmt$(revenueYTD)+'</div><div class="db-kpi-sub">collected YTD · '+currentYear+'</div></div>';
+    html+='<div class="db-kpi" style="border-top:3px solid #0f766e;"><div class="db-kpi-label">Net Amount YTD</div><div class="db-kpi-value">'+fmt$(netYTD)+'</div><div class="db-kpi-sub">collected − bartender costs</div></div>';
+    html+='<div class="db-kpi" style="border-top:3px solid #15803d;"><div class="db-kpi-label">Profit Margin YTD</div><div class="db-kpi-value">'+(marginYTD!==null?marginYTD+'%':'—')+'</div><div class="db-kpi-sub">net ÷ revenue · '+currentYear+'</div></div>';
     html+='</div>';
 
     /* Pipeline row */
