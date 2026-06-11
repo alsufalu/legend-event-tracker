@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_018';
+  const BUILD='v20260611_022';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -3542,7 +3542,6 @@ renderAll();ensureEditableContractFields();
     html+='<div class="db-kpi yellow"><div class="db-kpi-label">Pending Collections</div><div class="db-kpi-value">'+fmt$(pendingCollections)+'</div><div class="db-kpi-sub">unpaid balances</div></div>';
     html+='<div class="db-kpi red"><div class="db-kpi-label">Open Follow-Ups</div><div class="db-kpi-value">'+openFollowUps.length+'</div><div class="db-kpi-sub">'+(overdueFollowUps.length?' ⚠ '+overdueFollowUps.length+' overdue':'all on track')+'</div></div>';
     html+='<div class="db-kpi" style="border-top:3px solid #8b5cf6;"><div class="db-kpi-label">Lifetime Ad Cost %</div><div class="db-kpi-value">'+(lifetimeAdPct!==null?lifetimeAdPct+'%':'—')+'</div><div class="db-kpi-sub">ad spend ÷ booked+completed quotes</div></div>';
-    html+='<div class="db-kpi" style="border-top:3px solid #0891b2;"><div class="db-kpi-label">Cost Per Booking</div><div class="db-kpi-value">'+(costPerAcq!==null?fmt$(costPerAcq):'—')+'</div><div class="db-kpi-sub">ad spend ÷ booked+completed</div></div>';
     html+='</div>';
 
     /* Pipeline row */
@@ -3935,16 +3934,23 @@ renderAll();ensureEditableContractFields();
   };
 
   /* ── Chart helpers ── */
-  function getMondayOf(d){
-    var dt=new Date(d); dt.setHours(0,0,0,0);
-    var day=dt.getDay(); var diff=day===0?-6:1-day;
-    dt.setDate(dt.getDate()+diff); return dt;
-  }
   function addDays(d,n){ var dt=new Date(d); dt.setDate(dt.getDate()+n); return dt; }
-  function weekLabel(monday){
-    var sun=addDays(monday,6);
+  function rollingLabel(end){
+    var start=addDays(end,-6);
     var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return mo[monday.getMonth()]+' '+monday.getDate()+'-'+sun.getDate();
+    return mo[start.getMonth()]+' '+start.getDate()+'–'+end.getDate();
+  }
+
+  /* Rolling 7-day windows: most recent ends today, each prior window steps back 7 days */
+  function buildWeeks(n){
+    var today=new Date(); today.setHours(23,59,59,999);
+    var windows=[];
+    for(var i=n-1;i>=0;i--){
+      var end=addDays(today,-i*7); end.setHours(23,59,59,999);
+      var start=addDays(end,-6); start.setHours(0,0,0,0);
+      windows.push({start:start,end:end,label:rollingLabel(end)});
+    }
+    return windows;
   }
 
   var _charts={};
@@ -3991,57 +3997,97 @@ renderAll();ensureEditableContractFields();
 
     var labels=weeks.map(function(w){ return w.label; });
 
+    /* Ad spend: grouped by createdAt (when lead was entered / ad was spent) */
+    var adSpend=weeks.map(function(w){
+      var total=events.filter(function(e){ return inWeek(e.createdAt,w); })
+        .reduce(function(s,e){ return s+parseFloat(e.advertisingCost||e.adCost||0); },0);
+      return total>0?Math.round(total):null;
+    });
+
+    /* Realized revenue: deposit payments + final payments, each dated by payment date.
+       - depositAmountPaid counted on depositDatePaid (any event with a recorded deposit)
+       - For completed events: balance (quotationAmount - deposit) counted on finalAmountPaidDate
+       - If both payment dates fall in same window, both amounts are included → total = quotationAmount */
+    var realized=weeks.map(function(w){
+      var total=0;
+      events.forEach(function(e){
+        var dep=parseFloat(e.depositAmountPaid||0);
+        var quote=parseFloat(e.quotationAmount||e.quote||0);
+        /* Deposit payment */
+        if(dep>0&&e.depositDatePaid){
+          var dd=new Date(e.depositDatePaid+'T12:00:00');
+          if(dd>=w.start&&dd<=w.end) total+=dep;
+        }
+        /* Final payment (balance) for completed events */
+        if(e.status==='completed'&&e.finalAmountPaidDate){
+          var fd=new Date(e.finalAmountPaidDate+'T12:00:00');
+          if(fd>=w.start&&fd<=w.end){
+            var balance=Math.max(0,quote-dep);
+            total+=balance;
+          }
+        }
+      });
+      return total>0?Math.round(total):null;
+    });
+
     /* Inject chart panels if not present */
     if(!document.getElementById('dbChartRow')){
       var row=document.createElement('div');
       row.id='dbChartRow';
-      row.style.cssText='margin-top:4px;';
+      row.style.cssText='display:flex;flex-direction:column;gap:16px;margin-top:4px;';
       row.innerHTML=
-        '<div class="db-panel"><div class="db-panel-hdr"><span class="db-panel-title">📈 Weekly Win Rate</span><span class="db-kpi-label" style="margin:0;">booked ÷ entered leads</span></div><div style="position:relative;height:240px;"><canvas id="chartWinRate"></canvas></div><div class="small" style="color:var(--ink3);margin-top:8px;">% of leads entered each week that were eventually booked or completed.</div></div>';
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">'+
+          '<div class="db-panel"><div class="db-panel-hdr"><span class="db-panel-title">📈 Win Rate</span><span class="db-kpi-label" style="margin:0;">rolling 7-day window</span></div><div style="position:relative;height:200px;"><canvas id="chartWinRate"></canvas></div><div class="small" style="color:var(--ink3);margin-top:6px;">% of leads entered in each 7-day window eventually booked or completed.</div></div>'+
+          '<div class="db-panel"><div class="db-panel-hdr"><span class="db-panel-title">💸 Ad Spend</span><span class="db-kpi-label" style="margin:0;">rolling 7-day window</span></div><div style="position:relative;height:200px;"><canvas id="chartAdSpend"></canvas></div><div class="small" style="color:var(--ink3);margin-top:6px;">Total ad cost for leads entered in each 7-day window.</div></div>'+
+        '</div>'+
+        '<div class="db-panel"><div class="db-panel-hdr"><span class="db-panel-title">💰 Realized Revenue</span><span class="db-kpi-label" style="margin:0;">rolling 7-day window · by payment date</span></div><div style="position:relative;height:200px;"><canvas id="chartRealized"></canvas></div><div class="small" style="color:var(--ink3);margin-top:6px;">Deposits counted on deposit payment date. Final payments (balance of quotation) counted on final payment date for completed events. Both included if they fall in the same window.</div></div>';
       root.appendChild(row);
     }
 
-    var chartOpts=function(label,color,data){
+    function barOpts(label,color,data,fmtFn){
       return {
         type:'bar',
-        data:{
-          labels:labels,
-          datasets:[{
-            label:label,
-            data:data,
-            backgroundColor:color+'33',
-            borderColor:color,
-            borderWidth:2,
-            borderRadius:4,
-            spanGaps:true
-          }]
-        },
+        data:{ labels:labels, datasets:[{ label:label, data:data, backgroundColor:color+'33', borderColor:color, borderWidth:2, borderRadius:4, spanGaps:true }] },
         options:{
-          responsive:true,
-          maintainAspectRatio:false,
-          animation:{duration:300},
-          plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.parsed.y!==null?ctx.parsed.y+'%':'No data'; }}}},
-          scales:{
-            y:{min:0,max:100,ticks:{callback:function(v){ return v+'%'; }},grid:{color:'rgba(0,0,0,.06)'}},
-            x:{grid:{display:false}}
-          }
+          responsive:true, maintainAspectRatio:false, animation:{duration:300},
+          plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.parsed.y!==null?fmtFn(ctx.parsed.y):'No data'; }}}},
+          scales:{ y:{min:0,ticks:{callback:function(v){ return fmtFn(v); }},grid:{color:'rgba(0,0,0,.06)'}}, x:{grid:{display:false}} }
         }
       };
-    };
+    }
+    function pctFmt(v){ return v+'%'; }
+    function dolFmt(v){ return '$'+v.toLocaleString(); }
 
     loadChartJS(function(){
       var c1=document.getElementById('chartWinRate');
-      /* Update existing charts in-place; only create if they don't exist yet */
+      var c2=document.getElementById('chartAdSpend');
+      var c3=document.getElementById('chartRealized');
+
+      /* Win Rate — percentage scale */
+      var wrOpts=barOpts('Win Rate','#3b82f6',wrRates,pctFmt);
+      wrOpts.options.scales.y.max=100;
       if(_charts['wr']&&c1&&_charts['wr'].canvas===c1){
-        _charts['wr'].data.labels=labels;
-        _charts['wr'].data.datasets[0].data=wrRates;
-        _charts['wr'].update('none');
+        _charts['wr'].data.labels=labels; _charts['wr'].data.datasets[0].data=wrRates; _charts['wr'].update('none');
       } else {
         if(_charts['wr']){ try{_charts['wr'].destroy();}catch(ex){} delete _charts['wr']; }
-        if(c1) _charts['wr']=new Chart(c1,chartOpts('Win Rate','#3b82f6',wrRates));
+        if(c1) _charts['wr']=new Chart(c1,wrOpts);
       }
-      /* Ad Cost % chart removed — replaced by Lifetime Ad Cost % KPI card */
-      if(_charts['ac']){ try{_charts['ac'].destroy();}catch(ex){} delete _charts['ac']; }
+
+      /* Ad Spend — dollar scale */
+      if(_charts['as']&&c2&&_charts['as'].canvas===c2){
+        _charts['as'].data.labels=labels; _charts['as'].data.datasets[0].data=adSpend; _charts['as'].update('none');
+      } else {
+        if(_charts['as']){ try{_charts['as'].destroy();}catch(ex){} delete _charts['as']; }
+        if(c2) _charts['as']=new Chart(c2,barOpts('Ad Spend','#f59e0b',adSpend,dolFmt));
+      }
+
+      /* Realized Revenue — dollar scale */
+      if(_charts['rv']&&c3&&_charts['rv'].canvas===c3){
+        _charts['rv'].data.labels=labels; _charts['rv'].data.datasets[0].data=realized; _charts['rv'].update('none');
+      } else {
+        if(_charts['rv']){ try{_charts['rv'].destroy();}catch(ex){} delete _charts['rv']; }
+        if(c3) _charts['rv']=new Chart(c3,barOpts('Realized Revenue','#16a34a',realized,dolFmt));
+      }
     });
   }
 
@@ -4052,13 +4098,15 @@ renderAll();ensureEditableContractFields();
     setTimeout(renderCharts,150);
   };
 
-  /* Watchdog: re-render charts if they went missing (e.g. after any innerHTML wipe) */
+  /* Watchdog: re-render charts if they went missing */
   setInterval(function(){
     var tab=document.getElementById('summaryTab');
     if(!tab||tab.classList.contains('hidden')) return;
-    /* If the chart canvases lost their Chart.js instance, re-render */
     var c1=document.getElementById('chartWinRate');
-    var missing=!c1||!_charts['wr']||(_charts['wr']&&_charts['wr'].canvas!==c1);
+    var c2=document.getElementById('chartAdSpend');
+    var c3=document.getElementById('chartRealized');
+    var missing=!c1||!c2||!c3||!_charts['wr']||!_charts['as']||!_charts['rv']
+      ||(_charts['wr'].canvas!==c1)||(_charts['as'].canvas!==c2)||(_charts['rv'].canvas!==c3);
     if(missing) renderCharts();
   }, 2000);
 
