@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_003';
+  const BUILD='v20260611_006';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -707,7 +707,7 @@ tr:hover td { background:var(--surface2); }
 <div class="topbar">
   <div class="topbar-brand">
     <div class="topbar-brand-icon">🍹</div>
-    Legend Bartending Tracker
+    Legend Event Tracker
   </div>
   <div class="topbar-actions">
     <button id="exportBtn">Export backup</button>
@@ -750,47 +750,31 @@ tr:hover td { background:var(--surface2); }
 
     <!-- Summary Tab -->
     <section id="summaryTab">
-      <div class="grid-two">
-        <div class="card panel">
-          <h2>Pipeline</h2>
-          <div class="list" id="pipelineBox"></div>
-        </div>
-        <div class="card panel">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
-            <h2 style="margin:0;">Date and event summary</h2>
-            <div class="buttonbar summary-view-toggle">
-              <button type="button" id="summaryListViewBtn" class="primary">List view</button>
-              <button type="button" id="summaryCalendarViewBtn">Calendar view</button>
-            </div>
-          </div>
-          <div class="toolbar" style="margin-bottom:10px; align-items:center; gap:12px; flex-wrap:wrap;">
-            <div class="small" style="margin:0;">Filter by status</div>
-            <label style="display:inline-flex; align-items:center; gap:5px;"><input type="checkbox" class="summaryStatusFilter" value="deciding" checked> deciding</label>
-            <label style="display:inline-flex; align-items:center; gap:5px;"><input type="checkbox" class="summaryStatusFilter" value="booked" checked> booked</label>
-            <label style="display:inline-flex; align-items:center; gap:5px;"><input type="checkbox" class="summaryStatusFilter" value="completed" checked> completed</label>
-            <label style="display:inline-flex; align-items:center; gap:5px;"><input type="checkbox" class="summaryStatusFilter" value="lost" checked> lost</label>
-            <label style="display:inline-flex; align-items:center; gap:5px;"><input type="checkbox" class="summaryStatusFilter" value="canceled" checked> canceled/postponed</label>
-          </div>
-          <div class="toolbar" style="margin-bottom:10px; align-items:center;">
-            <button type="button" class="summarySortBtn" data-sort="date">Sort by date</button>
-            <button type="button" class="summarySortBtn" data-sort="eventName">Sort by event name</button>
-            <input id="summarySearch" placeholder="Search summary by event, customer, phone, venue, notes..." style="max-width:480px; flex:1; min-width:220px;">
-          </div>
-          <div id="summaryListView">
-            <div class="small" id="summarySortLabel" style="margin-bottom:8px;"></div>
-            <div class="list" id="summaryList"></div>
-          </div>
-          <div id="summaryCalendarView" class="hidden">
-            <div class="calendar-toolbar">
-              <button type="button" id="summaryCalendarPrevBtn">Previous month</button>
-              <div class="calendar-title" id="summaryCalendarTitle">Calendar</div>
-              <button type="button" id="summaryCalendarNextBtn">Next month</button>
-              <button type="button" id="summaryCalendarTodayBtn">This month</button>
-            </div>
-            <div class="calendar-grid" id="summaryCalendarGrid"></div>
-          </div>
-        </div>
+      <!-- Hidden stubs required by original renderSummary / renderPipeline JS -->
+      <div style="display:none" aria-hidden="true">
+        <div id="pipelineBox"></div>
+        <div id="summaryList"></div>
+        <div id="summarySortLabel"></div>
+        <div id="summaryListView"></div>
+        <div id="summaryCalendarView"></div>
+        <div id="summaryCalendarGrid"></div>
+        <div id="summaryCalendarTitle"></div>
+        <button id="summaryListViewBtn"></button>
+        <button id="summaryCalendarViewBtn"></button>
+        <button id="summaryCalendarPrevBtn"></button>
+        <button id="summaryCalendarNextBtn"></button>
+        <button id="summaryCalendarTodayBtn"></button>
+        <input type="checkbox" class="summaryStatusFilter" value="deciding" checked>
+        <input type="checkbox" class="summaryStatusFilter" value="booked" checked>
+        <input type="checkbox" class="summaryStatusFilter" value="completed" checked>
+        <input type="checkbox" class="summaryStatusFilter" value="lost" checked>
+        <input type="checkbox" class="summaryStatusFilter" value="canceled" checked>
+        <input id="summarySearch">
+        <button class="summarySortBtn" data-sort="date"></button>
+        <button class="summarySortBtn" data-sort="eventName"></button>
       </div>
+      <!-- Dashboard -->
+      <div id="dashboardRoot" style="padding:0 0 32px;"></div>
     </section>
 
     <!-- Bartenders Tab -->
@@ -3425,6 +3409,297 @@ renderAll();ensureEditableContractFields();
   modal.addEventListener("click", function(e) {
     if (e.target === modal) close();
   });
+})();
+
+/* ── Dashboard ── */
+(function dashboard(){
+  var DASH_STYLES = `
+  .db-wrap{font-family:inherit;}
+  .db-section-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3,#888);margin:0 0 10px;}
+  .db-kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+  .db-kpi{background:var(--surface,#fff);border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:16px 18px;min-width:0;}
+  .db-kpi-label{font-size:11px;font-weight:600;color:var(--ink3,#888);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+  .db-kpi-value{font-size:26px;font-weight:700;color:var(--ink,#0f172a);line-height:1;}
+  .db-kpi-sub{font-size:11px;color:var(--ink3,#888);margin-top:4px;}
+  .db-kpi.accent{border-left:3px solid #3b82f6;}
+  .db-kpi.green{border-left:3px solid #22c55e;}
+  .db-kpi.yellow{border-left:3px solid #f59e0b;}
+  .db-kpi.red{border-left:3px solid #ef4444;}
+  .db-two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+  .db-panel{background:var(--surface,#fff);border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:18px;}
+  .db-panel-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .db-panel-title{font-size:14px;font-weight:700;color:var(--ink,#0f172a);}
+  .db-event-card{border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:box-shadow .15s;}
+  .db-event-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.08);}
+  .db-event-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+  .db-event-name{font-size:13px;font-weight:600;color:var(--ink,#0f172a);}
+  .db-event-date{font-size:12px;font-weight:700;color:#3b82f6;white-space:nowrap;}
+  .db-event-meta{font-size:11px;color:var(--ink3,#888);margin-top:3px;}
+  .db-badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.04em;}
+  .db-badge.booked{background:#dcfce7;color:#16a34a;}
+  .db-badge.deciding{background:#fef9c3;color:#b45309;}
+  .db-badge.completed{background:#dbeafe;color:#1d4ed8;}
+  .db-badge.lost{background:#fee2e2;color:#dc2626;}
+  .db-badge.canceled{background:#f1f5f9;color:#64748b;}
+  .db-todo-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border,#e2e8f0);}
+  .db-todo-item:last-child{border-bottom:none;}
+  .db-todo-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+  .db-todo-dot.overdue{background:#ef4444;}
+  .db-todo-dot.today{background:#f59e0b;}
+  .db-todo-dot.soon{background:#3b82f6;}
+  .db-todo-text{font-size:13px;font-weight:600;color:var(--ink,#0f172a);}
+  .db-todo-sub{font-size:11px;color:var(--ink3,#888);}
+  .db-todo-due{font-size:11px;font-weight:700;}
+  .db-todo-due.overdue{color:#ef4444;}
+  .db-todo-due.today{color:#f59e0b;}
+  .db-todo-due.soon{color:#3b82f6;}
+  .db-pipeline-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
+  .db-pipe{background:var(--surface,#fff);border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:14px;text-align:center;}
+  .db-pipe-count{font-size:28px;font-weight:700;}
+  .db-pipe-label{font-size:11px;font-weight:600;color:var(--ink3,#888);text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
+  .db-empty{font-size:13px;color:var(--ink3,#888);padding:16px 0;text-align:center;}
+  @media(max-width:700px){.db-kpi-row{grid-template-columns:1fr 1fr;}.db-two{grid-template-columns:1fr;}.db-pipeline-row{grid-template-columns:repeat(3,1fr);}}
+  `;
+
+  function injectStyles(){
+    if(document.getElementById('dbStyles')) return;
+    var s=document.createElement('style'); s.id='dbStyles'; s.textContent=DASH_STYLES;
+    document.head.appendChild(s);
+  }
+
+  function fmt$(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  function fmtDate(d){ if(!d) return ''; var p=d.split('-'); if(p.length<3) return d; var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return months[parseInt(p[1],10)-1]+' '+parseInt(p[2],10); }
+  function daysBetween(a,b){ return Math.round((b-a)/(1000*60*60*24)); }
+  function todayStr(){ var d=new Date(); return d.toISOString().slice(0,10); }
+
+  function renderDash(){
+    var root=document.getElementById('dashboardRoot');
+    if(!root) return;
+    injectStyles();
+
+    var today=new Date(); today.setHours(0,0,0,0);
+    var todayISO=todayStr();
+    var in14=new Date(today); in14.setDate(today.getDate()+14);
+    var in7=new Date(today); in7.setDate(today.getDate()+7);
+
+    var events=(state&&state.events)||[];
+    var customers=(state&&state.customers)||[];
+
+    function getCustomer(id){ return customers.find(function(c){return c.id===id;})||{}; }
+
+    /* KPI calcs */
+    var now=new Date();
+    var monthStart=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10);
+    var monthEnd=new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().slice(0,10);
+
+    var bookedEvents=events.filter(function(e){return e.status==='booked';});
+    var thisMonthEvents=events.filter(function(e){return e.date&&e.date>=monthStart&&e.date<=monthEnd&&(e.status==='booked'||e.status==='completed');});
+    var monthRevenue=thisMonthEvents.reduce(function(s,e){return s+parseFloat(e.quote||0);},0);
+    var pendingCollections=bookedEvents.reduce(function(s,e){
+      var bal=parseFloat(e.balanceDue||0)||Math.max(0,parseFloat(e.quote||0)-parseFloat(e.depositPaid||0)-parseFloat(e.finalPaid||0));
+      return s+bal;
+    },0);
+    var openFollowUps=events.filter(function(e){return e.followUpDate&&(e.followUpStatus||'open')==='open';});
+    var overdueFollowUps=openFollowUps.filter(function(e){return e.followUpDate<todayISO;});
+
+    /* Upcoming events (next 14 days, booked or deciding) */
+    var upcoming=events.filter(function(e){
+      if(!e.date) return false;
+      var d=new Date(e.date+'T00:00:00'); d.setHours(0,0,0,0);
+      return d>=today && d<=in14 && (e.status==='booked'||e.status==='deciding');
+    }).sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});
+
+    /* Urgent to-dos: overdue + due within 7 days */
+    var urgentTodos=events.filter(function(e){
+      if(!e.followUpDate||(e.followUpStatus||'open')==='completed') return false;
+      return e.followUpDate<=in7.toISOString().slice(0,10);
+    }).sort(function(a,b){return a.followUpDate<b.followUpDate?-1:a.followUpDate>b.followUpDate?1:0;}).slice(0,8);
+
+    /* Pipeline counts */
+    var pipe={deciding:0,booked:0,completed:0,lost:0,canceled:0};
+    events.forEach(function(e){ if(pipe[e.status]!==undefined) pipe[e.status]++; else if(e.status==='canceled') pipe.canceled++; });
+
+    /* Build HTML */
+    var html='<div class="db-wrap">';
+
+    /* KPI row */
+    html+='<div class="db-kpi-row">';
+    html+='<div class="db-kpi accent"><div class="db-kpi-label">Events This Month</div><div class="db-kpi-value">'+thisMonthEvents.length+'</div><div class="db-kpi-sub">booked &amp; completed</div></div>';
+    html+='<div class="db-kpi green"><div class="db-kpi-label">Revenue This Month</div><div class="db-kpi-value">'+fmt$(monthRevenue)+'</div><div class="db-kpi-sub">from quoted events</div></div>';
+    html+='<div class="db-kpi yellow"><div class="db-kpi-label">Pending Collections</div><div class="db-kpi-value">'+fmt$(pendingCollections)+'</div><div class="db-kpi-sub">unpaid balances</div></div>';
+    html+='<div class="db-kpi red"><div class="db-kpi-label">Open Follow-Ups</div><div class="db-kpi-value">'+openFollowUps.length+'</div><div class="db-kpi-sub">'+(overdueFollowUps.length?' ⚠ '+overdueFollowUps.length+' overdue':'all on track')+'</div></div>';
+    html+='</div>';
+
+    /* Pipeline row */
+    html+='<div class="db-pipeline-row">';
+    html+='<div class="db-pipe"><div class="db-pipe-count" style="color:#d97706;">'+pipe.deciding+'</div><div class="db-pipe-label">Deciding</div></div>';
+    html+='<div class="db-pipe"><div class="db-pipe-count" style="color:#16a34a;">'+pipe.booked+'</div><div class="db-pipe-label">Booked</div></div>';
+    html+='<div class="db-pipe"><div class="db-pipe-count" style="color:#2563eb;">'+pipe.completed+'</div><div class="db-pipe-label">Completed</div></div>';
+    html+='<div class="db-pipe"><div class="db-pipe-count" style="color:#dc2626;">'+pipe.lost+'</div><div class="db-pipe-label">Lost</div></div>';
+    html+='<div class="db-pipe"><div class="db-pipe-count" style="color:#6b7280;">'+pipe.canceled+'</div><div class="db-pipe-label">Cancelled</div></div>';
+    html+='</div>';
+
+    /* Two-column: upcoming events + urgent to-dos */
+    html+='<div class="db-two">';
+
+    /* Upcoming events */
+    html+='<div class="db-panel">';
+    html+='<div class="db-panel-hdr"><span class="db-panel-title">📅 Upcoming Events — Next 14 Days</span><span class="db-kpi-label" style="margin:0;">'+upcoming.length+' event'+(upcoming.length!==1?'s':'')+'</span></div>';
+    if(upcoming.length===0){
+      html+='<div class="db-empty">No events in the next 14 days.</div>';
+    } else {
+      upcoming.forEach(function(e){
+        var cust=getCustomer(e.customerId||e.customer);
+        var d=new Date(e.date+'T00:00:00'); d.setHours(0,0,0,0);
+        var daysAway=daysBetween(today,d);
+        var daysLabel=daysAway===0?'Today':daysAway===1?'Tomorrow':daysAway+' days away';
+        html+='<div class="db-event-card" onclick="(function(){if(typeof switchTab===\'function\')switchTab(\'events\');setTimeout(function(){var items=document.querySelectorAll(\'.event-list-item\');items.forEach(function(el){if(el.dataset.id===\''+e.id+'\')el.click();});},200);})()">';
+        html+='<div class="db-event-card-top">';
+        html+='<div><div class="db-event-name">'+((e.eventName||e.name||'Unnamed event'))+'</div>';
+        html+='<div class="db-event-meta">'+(cust.name?cust.name+' · ':'')+''+(e.venueName||'')+(e.guests?' · '+e.guests+' guests':'')+'</div></div>';
+        html+='<div style="text-align:right;flex-shrink:0;"><div class="db-event-date">'+fmtDate(e.date)+'</div><div style="font-size:11px;color:var(--ink3);margin-top:2px;">'+daysLabel+'</div><div style="margin-top:4px;"><span class="db-badge '+(e.status||'deciding')+'">'+( e.status||'deciding')+'</span></div></div>';
+        html+='</div></div>';
+      });
+    }
+    html+='</div>';
+
+    /* Urgent to-dos */
+    html+='<div class="db-panel">';
+    html+='<div class="db-panel-hdr"><span class="db-panel-title">⚡ Urgent To-Dos</span><span class="db-kpi-label" style="margin:0;">next 7 days + overdue</span></div>';
+    if(urgentTodos.length===0){
+      html+='<div class="db-empty">No urgent follow-ups. You\'re all caught up!</div>';
+    } else {
+      urgentTodos.forEach(function(e){
+        var d=new Date(e.followUpDate+'T00:00:00'); d.setHours(0,0,0,0);
+        var daysAway=daysBetween(today,d);
+        var bucket=daysAway<0?'overdue':daysAway===0?'today':'soon';
+        var dueLabel=daysAway<0?Math.abs(daysAway)+' day'+(Math.abs(daysAway)!==1?'s':'')+' overdue':daysAway===0?'Due today':'Due in '+daysAway+' day'+(daysAway!==1?'s':'');
+        var cust=getCustomer(e.customerId||e.customer);
+        html+='<div class="db-todo-item">';
+        html+='<div class="db-todo-dot '+bucket+'" style="margin-top:5px;"></div>';
+        html+='<div style="flex:1;min-width:0;">';
+        html+='<div class="db-todo-text">'+(e.followUpType||'Follow up')+'</div>';
+        html+='<div class="db-todo-sub">'+((e.eventName||e.name||'Event'))+(cust.name?' · '+cust.name:'')+(e.followUpNotes?' — '+e.followUpNotes.slice(0,60):'')+'</div>';
+        html+='</div>';
+        html+='<div class="db-todo-due '+bucket+'">'+dueLabel+'</div>';
+        html+='</div>';
+      });
+    }
+    html+='</div>';
+
+    html+='</div>'; /* end db-two */
+    html+='</div>'; /* end db-wrap */
+
+    root.innerHTML=html;
+  }
+
+  /* Hook into renderAll */
+  var origRenderAll=window.renderAll;
+  window.renderAll=function(){
+    try{ if(origRenderAll) origRenderAll.apply(this,arguments); }catch(ex){}
+    renderDash();
+  };
+
+  /* Also render when tab is clicked */
+  document.addEventListener('click',function(e){
+    var btn=e.target.closest('[data-tab="summary"]');
+    if(btn) setTimeout(renderDash,50);
+  });
+
+  window.renderDashboard=renderDash;
+})();
+
+/* ── Follow Up Tab in Event Form ── */
+(function followUpTab(){
+  /* Add tab button */
+  var tabs = document.getElementById('eventFormTabs');
+  if(tabs){
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'event-form-tab';
+    btn.setAttribute('data-event-form-section','followUpSection');
+    btn.textContent = 'Follow Up';
+    tabs.appendChild(btn);
+  }
+
+  /* Build section HTML */
+  var section = document.createElement('div');
+  section.className = 'event-form-section';
+  section.id = 'followUpSection';
+  section.innerHTML = [
+    '<div class="section-card-lite">',
+    '<h3 style="margin-bottom:14px;">Follow Up</h3>',
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">',
+      '<div>',
+        '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--ink2);">Due Date</label>',
+        '<input type="date" id="fuDate" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;">',
+      '</div>',
+      '<div>',
+        '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--ink2);">Type</label>',
+        '<select id="fuType" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;">',
+          '<option value="">— Select type —</option>',
+          '<option value="Call">Call</option>',
+          '<option value="Text">Text</option>',
+          '<option value="Email">Email</option>',
+          '<option value="Send contract">Send contract</option>',
+          '<option value="Send invoice">Send invoice</option>',
+          '<option value="Collect deposit">Collect deposit</option>',
+          '<option value="Collect final payment">Collect final payment</option>',
+          '<option value="Confirm details">Confirm details</option>',
+          '<option value="Other">Other</option>',
+        '</select>',
+      '</div>',
+      '<div>',
+        '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--ink2);">Status</label>',
+        '<select id="fuStatus" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;">',
+          '<option value="open">Open</option>',
+          '<option value="completed">Completed</option>',
+        '</select>',
+      '</div>',
+      '<div>',
+        '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--ink2);">Completed Date</label>',
+        '<input type="date" id="fuCompletedDate" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;">',
+      '</div>',
+    '</div>',
+    '<div style="margin-bottom:14px;">',
+      '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--ink2);">Notes</label>',
+      '<textarea id="fuNotes" rows="4" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;resize:vertical;" placeholder="Notes about this follow up…"></textarea>',
+    '</div>',
+    '<button type="button" id="fuSaveBtn" class="primary">Save Follow Up</button>',
+    '<span id="fuSaved" style="margin-left:12px;font-size:13px;color:#34d399;display:none;">Saved!</span>',
+    '</div>'
+  ].join('');
+
+  /* Insert section before the buttonbar at end of form pane */
+  var buttonbar = document.querySelector('.events-detail-pane .buttonbar');
+  if(buttonbar) buttonbar.parentNode.insertBefore(section, buttonbar);
+
+  /* Sync visible fields → hidden stubs → state on save */
+  document.getElementById('fuSaveBtn').addEventListener('click', function(){
+    document.getElementById('eFollowUpDate').value      = document.getElementById('fuDate').value;
+    document.getElementById('eFollowUpType').value      = document.getElementById('fuType').value;
+    document.getElementById('eFollowUpStatus').value    = document.getElementById('fuStatus').value;
+    document.getElementById('eFollowUpCompletedDate').value = document.getElementById('fuCompletedDate').value;
+    document.getElementById('eFollowUpNotes').value     = document.getElementById('fuNotes').value;
+    if(typeof saveEventPayloadFromForm==='function') saveEventPayloadFromForm({keepFormOpen:true});
+    else if(typeof window.saveState==='function') window.saveState();
+    var saved = document.getElementById('fuSaved');
+    saved.style.display='inline';
+    setTimeout(function(){ saved.style.display='none'; }, 2000);
+  });
+
+  /* Populate visible fields when an event is loaded */
+  var origLoadEvent = window.loadEventIntoForm;
+  window.loadEventIntoForm = function(){
+    if(origLoadEvent) origLoadEvent.apply(this, arguments);
+    setTimeout(function(){
+      document.getElementById('fuDate').value          = document.getElementById('eFollowUpDate').value || '';
+      document.getElementById('fuType').value          = document.getElementById('eFollowUpType').value || '';
+      document.getElementById('fuStatus').value        = document.getElementById('eFollowUpStatus').value || 'open';
+      document.getElementById('fuCompletedDate').value = document.getElementById('eFollowUpCompletedDate').value || '';
+      document.getElementById('fuNotes').value         = document.getElementById('eFollowUpNotes').value || '';
+    }, 50);
+  };
 })();
 
 /* ── Supabase Cloud Auth + Sync ── */
