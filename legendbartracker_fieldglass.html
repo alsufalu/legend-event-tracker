@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_023';
+  const BUILD='v20260611_024';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -775,8 +775,26 @@ tr:hover td { background:var(--surface2); }
       </div>
       <!-- Dashboard -->
       <div id="dashboardRoot" style="padding:0 0 4px;"></div>
-      <!-- Weekly charts live here — outside dashboardRoot so innerHTML wipes don't destroy them -->
-      <div id="dbChartContainer" style="padding:0 0 32px;"></div>
+      <!-- Charts — static canvases so they always exist in DOM -->
+      <div id="dbChartContainer" style="padding:0 0 32px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+          <div class="db-panel">
+            <div class="db-panel-hdr"><span class="db-panel-title">📈 Win Rate</span><span class="db-kpi-label" style="margin:0;">rolling 7-day window</span></div>
+            <div style="position:relative;height:200px;"><canvas id="chartWinRate"></canvas></div>
+            <div class="small" style="color:var(--ink3);margin-top:6px;">% of leads entered in each 7-day window eventually booked or completed.</div>
+          </div>
+          <div class="db-panel">
+            <div class="db-panel-hdr"><span class="db-panel-title">💸 Ad Spend</span><span class="db-kpi-label" style="margin:0;">rolling 7-day window</span></div>
+            <div style="position:relative;height:200px;"><canvas id="chartAdSpend"></canvas></div>
+            <div class="small" style="color:var(--ink3);margin-top:6px;">Total ad cost for leads entered in each 7-day window.</div>
+          </div>
+        </div>
+        <div class="db-panel">
+          <div class="db-panel-hdr"><span class="db-panel-title">💰 Realized Revenue</span><span class="db-kpi-label" style="margin:0;">rolling 7-day window · by payment date</span></div>
+          <div style="position:relative;height:200px;"><canvas id="chartRealized"></canvas></div>
+          <div class="small" style="color:var(--ink3);margin-top:6px;">Deposits counted on deposit date. Completed event balance (quote − deposit) counted on final payment date. Both counted if both dates fall in the same window.</div>
+        </div>
+      </div>
     </section>
 
     <!-- Bartenders Tab -->
@@ -3981,8 +3999,8 @@ renderAll();ensureEditableContractFields();
   }
 
   function renderCharts(){
-    var root=document.getElementById('dbChartContainer')||document.getElementById('dashboardRoot');
-    if(!root) return;
+    /* Canvases are static in HTML — just check one exists before proceeding */
+    if(!document.getElementById('chartWinRate')) return;
     stampEvents();
     var events=(state&&state.events)||[];
     var weeks=buildWeeks(8);
@@ -4029,25 +4047,6 @@ renderAll();ensureEditableContractFields();
       });
       return total>0?Math.round(total):null;
     });
-
-    /* Inject chart panels — rebuild if structure is outdated (missing chartRealized) */
-    if(document.getElementById('dbChartRow')&&!document.getElementById('chartRealized')){
-      var old=document.getElementById('dbChartRow');
-      ['wr','as','rv'].forEach(function(k){ if(_charts[k]){ try{_charts[k].destroy();}catch(ex){} delete _charts[k]; } });
-      old.parentNode.removeChild(old);
-    }
-    if(!document.getElementById('dbChartRow')){
-      var row=document.createElement('div');
-      row.id='dbChartRow';
-      row.style.cssText='display:flex;flex-direction:column;gap:16px;margin-top:4px;';
-      row.innerHTML=
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">'+
-          '<div class="db-panel"><div class="db-panel-hdr"><span class="db-panel-title">📈 Win Rate</span><span class="db-kpi-label" style="margin:0;">rolling 7-day window</span></div><div style="position:relative;height:200px;"><canvas id="chartWinRate"></canvas></div><div class="small" style="color:var(--ink3);margin-top:6px;">% of leads entered in each 7-day window eventually booked or completed.</div></div>'+
-          '<div class="db-panel"><div class="db-panel-hdr"><span class="db-panel-title">💸 Ad Spend</span><span class="db-kpi-label" style="margin:0;">rolling 7-day window</span></div><div style="position:relative;height:200px;"><canvas id="chartAdSpend"></canvas></div><div class="small" style="color:var(--ink3);margin-top:6px;">Total ad cost for leads entered in each 7-day window.</div></div>'+
-        '</div>'+
-        '<div class="db-panel"><div class="db-panel-hdr"><span class="db-panel-title">💰 Realized Revenue</span><span class="db-kpi-label" style="margin:0;">rolling 7-day window · by payment date</span></div><div style="position:relative;height:200px;"><canvas id="chartRealized"></canvas></div><div class="small" style="color:var(--ink3);margin-top:6px;">Deposits counted on deposit payment date. Final payments (balance of quotation) counted on final payment date for completed events. Both included if they fall in the same window.</div></div>';
-      root.appendChild(row);
-    }
 
     function barOpts(label,color,data,fmtFn){
       return {
@@ -4103,16 +4102,11 @@ renderAll();ensureEditableContractFields();
     setTimeout(renderCharts,150);
   };
 
-  /* Watchdog: re-render charts if they went missing */
+  /* Watchdog: re-render if Chart.js instances are missing */
   setInterval(function(){
     var tab=document.getElementById('summaryTab');
     if(!tab||tab.classList.contains('hidden')) return;
-    var c1=document.getElementById('chartWinRate');
-    var c2=document.getElementById('chartAdSpend');
-    var c3=document.getElementById('chartRealized');
-    var missing=!c1||!c2||!c3||!_charts['wr']||!_charts['as']||!_charts['rv']
-      ||(_charts['wr'].canvas!==c1)||(_charts['as'].canvas!==c2)||(_charts['rv'].canvas!==c3);
-    if(missing) renderCharts();
+    if(!_charts['wr']||!_charts['as']||!_charts['rv']) renderCharts();
   }, 2000);
 
   setTimeout(renderCharts,1500);
