@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_026';
+  const BUILD='v20260611_027';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -4088,21 +4088,39 @@ renderAll();ensureEditableContractFields();
     });
   }
 
-  /* Hook into dashboard render */
+  function resizeCharts(){
+    ['wr','as','rv'].forEach(function(k){
+      if(_charts[k]){ try{ _charts[k].resize(); }catch(ex){} }
+    });
+  }
+
+  /* Hook into dashboard render — fires when user clicks Summary tab */
   var _origRenderDash=window.renderDashboard;
   window.renderDashboard=function(){
     if(_origRenderDash) _origRenderDash.apply(this,arguments);
-    setTimeout(renderCharts,150);
+    setTimeout(function(){ renderCharts(); setTimeout(resizeCharts,50); },150);
   };
 
-  /* Watchdog: re-render if Chart.js instances are missing */
+  /* Also catch direct summary tab clicks */
+  document.addEventListener('click',function(e){
+    if(e.target.closest('[data-tab="summary"]')){
+      setTimeout(function(){ renderCharts(); setTimeout(resizeCharts,100); },100);
+    }
+  });
+
+  /* Watchdog: re-render or resize every 2s while summary is visible */
   setInterval(function(){
     var tab=document.getElementById('summaryTab');
     if(!tab||tab.classList.contains('hidden')) return;
-    if(!_charts['wr']||!_charts['as']||!_charts['rv']) renderCharts();
+    if(!_charts['wr']||!_charts['as']||!_charts['rv']){
+      renderCharts();
+    } else {
+      resizeCharts();
+    }
   }, 2000);
 
-  setTimeout(renderCharts,1500);
+  /* Initial render — delay until after login likely complete */
+  setTimeout(renderCharts,3000);
 })();
 
 /* ── Follow Up Tab in Event Form ── */
