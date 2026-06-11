@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_024';
+  const BUILD='v20260611_025';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -680,6 +680,7 @@ tr:hover td { background:var(--surface2); }
 .lbt-login-btn { width:100%; padding:15px; border-radius:12px; border:none; background:var(--blue); color:white; font-size:17px; font-weight:700; font-family:inherit; cursor:pointer; margin-top:4px; }
 .lbt-login-error { font-size:13px; text-align:center; margin-top:10px; min-height:18px; color:#ff6b6b; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -3975,10 +3976,14 @@ renderAll();ensureEditableContractFields();
   function destroyChart(id){ if(_charts[id]){ _charts[id].destroy(); delete _charts[id]; } }
 
   function loadChartJS(cb){
+    /* Chart.js loaded synchronously in <head> — always available */
     if(window.Chart){ cb(); return; }
-    var s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';
-    s.onload=cb; document.head.appendChild(s);
+    /* Fallback: wait up to 3s for it to appear */
+    var attempts=0;
+    var wait=setInterval(function(){
+      if(window.Chart){ clearInterval(wait); cb(); }
+      else if(++attempts>30) clearInterval(wait);
+    },100);
   }
 
   function buildWeeks(n){
