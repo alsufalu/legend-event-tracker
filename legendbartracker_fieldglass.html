@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_022';
+  const BUILD='v20260611_023';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -4030,7 +4030,12 @@ renderAll();ensureEditableContractFields();
       return total>0?Math.round(total):null;
     });
 
-    /* Inject chart panels if not present */
+    /* Inject chart panels — rebuild if structure is outdated (missing chartRealized) */
+    if(document.getElementById('dbChartRow')&&!document.getElementById('chartRealized')){
+      var old=document.getElementById('dbChartRow');
+      ['wr','as','rv'].forEach(function(k){ if(_charts[k]){ try{_charts[k].destroy();}catch(ex){} delete _charts[k]; } });
+      old.parentNode.removeChild(old);
+    }
     if(!document.getElementById('dbChartRow')){
       var row=document.createElement('div');
       row.id='dbChartRow';
