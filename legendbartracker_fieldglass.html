@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_010';
+  const BUILD='v20260611_011';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -877,6 +877,7 @@ tr:hover td { background:var(--surface2); }
               <div class="field-wrap"><label class="field-label" for="eNewCustomerPhone">Customer phone</label><input id="eNewCustomerPhone" placeholder="Customer phone"></div>
               <div class="field-wrap"><label class="field-label" for="eStatus">Status</label><select id="eStatus"><option value="deciding">deciding</option><option value="booked">booked</option><option value="completed">completed</option><option value="lost">lost</option><option value="canceled">canceled/postponed</option></select></div>
               <div class="field-wrap"><label class="field-label" for="eEventType">Event type</label><input id="eEventType" type="text" placeholder="Dinner party, wedding, birthday, corporate event" autocomplete="off" tabindex="0"></div>
+              <div class="field-wrap"><label class="field-label" for="eCreatedAt">Date entered</label><input id="eCreatedAt" type="date" title="Date this lead was entered into the system"></div>
             </div>
             <div class="row four">
               <div class="field-wrap"><label class="field-label" for="eDate">Event date</label><input id="eDate" type="date"></div>
@@ -3813,6 +3814,63 @@ renderAll();ensureEditableContractFields();
     a.download='unmatched_thumbtack_contacts.csv';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   }
+})();
+
+/* ── Date Entered field wiring ── */
+(function dateEnteredField(){
+  function toDateInput(iso){ return iso ? iso.slice(0,10) : ''; }
+  function toISO(dateStr){ return dateStr ? dateStr+'T12:00:00.000Z' : ''; }
+  function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+  /* Auto-populate with today when form is cleared for a new event */
+  var origClear=window.clearEventForm;
+  window.clearEventForm=function(){
+    if(origClear) origClear.apply(this,arguments);
+    var f=document.getElementById('eCreatedAt');
+    if(f) f.value=todayISO();
+  };
+
+  /* Load createdAt into visible field when event is opened */
+  var origLoad=window.loadEventIntoForm;
+  window.loadEventIntoForm=function(){
+    if(origLoad) origLoad.apply(this,arguments);
+    setTimeout(function(){
+      var f=document.getElementById('eCreatedAt');
+      if(!f) return;
+      /* Find current event in state */
+      var id=window.editingEventId;
+      if(id&&state&&state.events){
+        var ev=state.events.find(function(e){ return e.id===id; });
+        f.value=ev&&ev.createdAt ? toDateInput(ev.createdAt) : todayISO();
+      } else {
+        f.value=todayISO();
+      }
+    },50);
+  };
+
+  /* Save createdAt from visible field back to state on every save */
+  var origSave2=window.saveEventPayloadFromForm;
+  window.saveEventPayloadFromForm=function(opts){
+    if(origSave2) origSave2.apply(this,arguments);
+    var f=document.getElementById('eCreatedAt');
+    if(!f||!f.value) return;
+    var iso=toISO(f.value);
+    /* Find the event that was just saved and stamp createdAt */
+    var id=window.editingEventId;
+    if(state&&state.events){
+      var target=id
+        ? state.events.find(function(e){ return e.id===id; })
+        : state.events[state.events.length-1]; /* last = newly added */
+      if(target) target.createdAt=iso;
+    }
+    try{ window.saveState(); }catch(ex){}
+  };
+
+  /* Set today on page load if form is in new-event state */
+  setTimeout(function(){
+    var f=document.getElementById('eCreatedAt');
+    if(f&&!f.value) f.value=todayISO();
+  },300);
 })();
 
 /* ── Weekly Metrics Charts ── */
