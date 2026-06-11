@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_001';
+  const BUILD='v20260611_002';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -3536,8 +3536,24 @@ renderAll();ensureEditableContractFields();
       errEl.style.color='#34d399';
       errEl.textContent='Account created! Check your email for a confirmation link, then sign in.';
     } else {
-      var r=await sbClient.auth.signInWithPassword({email:email,password:password});
-      if(r.error){ errEl.textContent=r.error.message; }
+      try{
+        errEl.style.color='rgba(255,255,255,.6)';
+        errEl.textContent='Signing in…';
+        console.log('[LBT] calling signInWithPassword for',email);
+        var r=await sbClient.auth.signInWithPassword({email:email,password:password});
+        console.log('[LBT] signInWithPassword result',JSON.stringify({error:r.error,hasSession:!!(r.data&&r.data.session)}));
+        if(r.error){
+          errEl.style.color='#ff6b6b';
+          errEl.textContent=r.error.message;
+        } else {
+          errEl.style.color='#34d399';
+          errEl.textContent='Signed in! Loading…';
+        }
+      }catch(ex){
+        console.error('[LBT] signIn exception',ex);
+        errEl.style.color='#ff6b6b';
+        errEl.textContent='Error: '+ex.message;
+      }
     }
   };
 
