@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_029';
+  const BUILD='v20260611_030';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -252,6 +252,7 @@ h3 { margin:0 0 10px; font-size:14px; font-weight:600; letter-spacing:-.01em; co
 
 /* ── Show dashboard metrics only on Summary tab ── */
 body:not(.summary-active) .stats { display:none !important; }
+body.summary-active .stats { display:none !important; }
 
 /* ── Hidden ── */
 .hidden { display:none !important; }
