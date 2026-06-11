@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_013';
+  const BUILD='v20260611_014';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -774,7 +774,9 @@ tr:hover td { background:var(--surface2); }
         <button class="summarySortBtn" data-sort="eventName"></button>
       </div>
       <!-- Dashboard -->
-      <div id="dashboardRoot" style="padding:0 0 32px;"></div>
+      <div id="dashboardRoot" style="padding:0 0 4px;"></div>
+      <!-- Weekly charts live here — outside dashboardRoot so innerHTML wipes don't destroy them -->
+      <div id="dbChartContainer" style="padding:0 0 32px;"></div>
     </section>
 
     <!-- Bartenders Tab -->
@@ -3961,7 +3963,7 @@ renderAll();ensureEditableContractFields();
   }
 
   function renderCharts(){
-    var root=document.getElementById('dashboardRoot');
+    var root=document.getElementById('dbChartContainer')||document.getElementById('dashboardRoot');
     if(!root) return;
     stampEvents();
     var events=(state&&state.events)||[];
