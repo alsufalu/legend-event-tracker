@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_007';
+  const BUILD='v20260611_008';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -3778,9 +3778,13 @@ renderAll();ensureEditableContractFields();
     currentUser=session?session.user:null;
     if(currentUser){
       showApp(); /* Show immediately, load data in background */
+      setTimeout(function(){ try{ if(window.renderDashboard) window.renderDashboard(); }catch(ex){} }, 200);
       loadFromCloud().then(function(loaded){
         if(loaded){ try{ state=normalizeLoadedState(state); renderAll(); }catch(ex){} }
-      }).catch(function(){});
+        setTimeout(function(){ try{ if(window.renderDashboard) window.renderDashboard(); }catch(ex){} }, 100);
+      }).catch(function(){
+        setTimeout(function(){ try{ if(window.renderDashboard) window.renderDashboard(); }catch(ex){} }, 100);
+      });
     } else {
       hideApp();
     }
