@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_025';
+  const BUILD='v20260611_026';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -3984,18 +3984,6 @@ renderAll();ensureEditableContractFields();
       if(window.Chart){ clearInterval(wait); cb(); }
       else if(++attempts>30) clearInterval(wait);
     },100);
-  }
-
-  function buildWeeks(n){
-    var today=new Date(); today.setHours(0,0,0,0);
-    var thisMonday=getMondayOf(today);
-    var weeks=[];
-    for(var i=n-1;i>=0;i--){
-      var start=addDays(thisMonday,-i*7);
-      var end=addDays(start,6); end.setHours(23,59,59,999);
-      weeks.push({start:start,end:end,label:weekLabel(start)});
-    }
-    return weeks;
   }
 
   function inWeek(isoStr,week){
