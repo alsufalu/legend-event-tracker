@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_008';
+  const BUILD='v20260611_010';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -3614,6 +3614,367 @@ renderAll();ensureEditableContractFields();
     var tab=document.getElementById('summaryTab');
     if(tab&&!tab.classList.contains('hidden')) renderDash();
   }, 5000);
+})();
+
+/* ── One-time createdAt migration from Thumbtack contacts CSV ── */
+(function migrateCreatedAt(){
+  if(localStorage.getItem('lbt_createdAt_migrated_v1')) return;
+  var CSV=[
+    ["Shana Shana","3233267161","2026-06-10"],
+    ["Christina Lynch","2402776337","2026-06-09"],
+    ["Kevin Shahi","6302207691","2026-06-08"],
+    ["Jackie Manning","7087458457","2026-06-08"],
+    ["Cassidy Taiym","6302222361","2026-06-08"],
+    ["Brian Behm","6127413113","2026-06-08"],
+    ["Kris Walker","8472178403","2026-06-07"],
+    ["Cameron Giles","6306057211","2026-06-07"],
+    ["Tash Banks","7736738994","2026-06-06"],
+    ["Megan Wong","4158232304","2026-06-05"],
+    ["Claudia Garcia","2193146123","2026-06-05"],
+    ["serena kapoor","6308850537","2026-06-04"],
+    ["Maddalen Yarza","2133001521","2026-06-04"],
+    ["Maya maya","6309154569","2026-06-04"],
+    ["Alexa Hyman","6302001653","2026-06-01"],
+    ["Lauren Miles","4799250709","2026-06-01"],
+    ["Yamili Saucedo","6307077979","2026-05-31"],
+    ["Ruben Torres","8474175661","2026-05-31"],
+    ["Jenna Conforti","","2026-05-31"],
+    ["Caroline Trecartin","7082541626","2026-05-31"],
+    ["Jim Strachan","8475467769","2026-05-31"],
+    ["Leanna Gentry","3128383140","2026-05-31"],
+    ["andrea villanueva","7736105763","2026-05-30"],
+    ["Molly Shannon","2709948801","2026-05-28"],
+    ["Kelly Iler","2192424816","2026-05-27"],
+    ["Alana Sivo","9522559654","2026-05-27"],
+    ["Rigoberto Ramirez","7733966947","2026-05-27"],
+    ["Sarah Gutierrez","7083235185","2026-05-26"],
+    ["Dayzi Brown","2622216631","2026-05-26"],
+    ["Henry Goldman","7733604766","2026-05-26"],
+    ["Markus Simmons","7088285769","2026-05-25"],
+    ["Donna Rice","8475283043","2026-05-23"],
+    ["Krista Santangelo","2032097848","2026-05-22"],
+    ["Amy Axford","6462566015","2026-05-22"],
+    ["Nathalie Lankford","7044441195","2026-05-21"],
+    ["Mia Allen","7737066857","2026-05-20"],
+    ["Michael Chaput","8313839391","2026-05-20"],
+    ["Aysha Ali","8473382972","2026-05-20"],
+    ["Emily Kaplan","4255771153","2026-05-14"],
+    ["Roberta Garza","7734410331","2026-05-13"],
+    ["jaimie szczepanski","7737338817","2026-05-10"],
+    ["Shazana Nadeem","7737961018","2026-05-06"],
+    ["Lindsey Rensch","3125500340","2026-05-06"],
+    ["Alyssa Hayes","7192095008","2026-05-04"],
+    ["Sandeep Kulkarni","3126078392","2026-05-04"],
+    ["Tami Wilson","8593806007","2026-05-03"],
+    ["Brian Bushnell","6302095711","2026-05-02"],
+    ["Evin Marie","7082759115","2026-05-02"],
+    ["Balvir Singh","9167760404","2026-05-01"],
+    ["Pritika Patel","8478303013","2026-05-01"],
+    ["Ashaunda Parker","3127224772","2026-05-01"],
+    ["Lily Speer","8472874860","2026-04-30"],
+    ["Maribeth Russell","6122276745","2026-04-30"],
+    ["Vanessa Diaz","2247150606","2026-04-29"],
+    ["Brianna Green","7543120126","2026-04-29"],
+    ["Clark Kapphan","7245916047","2026-04-29"],
+    ["Nicholas Thornburg","2246590134","2026-04-29"],
+    ["Stefani Nekic","3122178310","2026-04-28"],
+    ["Andrea Fernandez","3126595880","2026-04-28"],
+    ["Danny Cameron","8473377301","2026-04-28"],
+    ["Esmeralda palma","7086634519","2026-04-27"],
+    ["Madden Callahan","4046324811","2026-04-27"],
+    ["Elizabeth Fell","6303291152","2026-04-27"],
+    ["Amrutha Sivakumar","8476566811","2026-04-26"],
+    ["Erin Potterton","7738084033","2026-04-24"],
+    ["Justin Negash","7737988661","2026-04-24"],
+    ["Emily DiPasquantonio","6304145585","2026-04-23"],
+    ["Ashley Carman","8476517906","2026-04-23"],
+    ["Samantha Kucera","6175711338","2026-04-23"],
+    ["Jorge Gavillan","3523467306","2026-04-22"],
+    ["Russell Sanchez","8477720206","2026-04-22"],
+    ["Alexis Martell","7022099492","2026-04-22"],
+    ["Frank Maugeri","3129658835","2026-04-22"],
+    ["Juliette Moore","7733196637","2026-04-21"],
+    ["Heather Cavada","3122172585","2026-04-21"],
+    ["Alex Wu","2815132679","2026-04-20"],
+    ["Kara Packwood","3128044297","2026-04-20"],
+    ["Renee Splitt","8478285691","2026-04-19"],
+    ["Marquitta Wallace","7082684396","2026-04-18"],
+    ["Vishaan Patel","2245785780","2026-04-17"],
+    ["Jennifer Ortega","3128822542","2026-04-16"],
+    ["Josiah McNeal","3129196542","2026-04-16"],
+    ["Ke Gi","2538807592","2026-04-15"],
+    ["Brianna Ebbert-Moede","8156169775","2026-04-14"],
+    ["Sean Scarry","8475250549","2026-04-14"],
+    ["Rachael Bulwicki","8152950076","2026-04-13"],
+    ["Jessica Hernandez","8153079197","2026-04-12"],
+    ["Nina Gozzi","8608175019","2026-04-12"],
+    ["Heather Mussar","6306697684","2026-04-12"],
+    ["Rebecca Day","6302026642","2026-04-11"],
+    ["Payal Shah","6305182335","2026-04-11"],
+    ["Gaby De la torre","6304638565","2026-04-09"],
+    ["Caitlyn Morrissey","6307969420","2026-04-09"],
+    ["Todd Ruder","7735624234","2026-04-09"],
+    ["Chandana Mahale","5852694405","2026-04-08"],
+    ["Bhavin Shah","6304480615","2026-04-07"],
+    ["Carlos Lorenzo","7733871462","2026-04-05"],
+    ["Alisa Ferguson","7816921291","2026-04-01"],
+    ["Jorge Munoz","7737460585","2026-03-30"],
+    ["Natalia Miranda","7738993872","2026-03-30"],
+    ["Kevin Dwyer","6306749446","2026-03-30"],
+    ["Kami Flick","2192990993","2026-03-29"],
+    ["Linda Nguyen","3109740777","2026-03-27"],
+    ["Jamie Burt","4803588235","2026-03-27"],
+    ["Matt Walters","3178503917","2026-03-27"],
+    ["bianca Garcia","7737509290","2026-03-26"],
+    ["Nayeli Ortiz","6304568949","2026-03-26"],
+    ["Jerron Dennis","7865060452","2026-03-25"],
+    ["Sujay Mahtani","4047237846","2026-03-24"],
+    ["Jessica Svabek","8156745871","2026-03-24"],
+    ["Nick Quirke","3123752644","2026-03-24"],
+    ["Jax Ramos","3129780314","2026-03-24"],
+    ["Becca Harkema","7089354429","2026-03-24"],
+    ["Adam Stevenson","6303468940","2026-03-23"],
+    ["Amber Billares","8479998303","2026-03-23"],
+    ["Tory Mitchell","7737519660","2026-03-21"],
+    ["Rachael Rosario","8473706399","2026-03-20"],
+    ["Alejandro Cisneros","7084698238","2026-03-19"],
+    ["Britney Briseno","8473872491","2026-03-18"],
+    ["Esmeralda Flo","8156001219","2026-03-18"],
+    ["Robert Ramey","2245457588","2026-03-17"],
+    ["Malachi Wilkins","6235653285","2026-03-16"],
+    ["Cheyenne Cole","2198161627","2026-03-16"],
+    ["Luisa Mestriner","7733862234","2026-03-11"],
+    ["Olivia Rough","5025541004","2026-03-10"],
+    ["Sara Gonzalez","7732308661","2026-03-10"],
+    ["Malinda Crumbly","2192311264","2026-03-10"],
+    ["Aaliyah Garibay","6517958694","2026-03-07"],
+    ["Michelle Wright","7086503305","2026-03-07"],
+    ["Amina Sheppard","2098174021","2026-03-03"],
+    ["Darius Caldwell","7733222149","2026-02-27"],
+    ["Rosemary Ndikum","7089962218","2026-02-27"],
+    ["Barbora Simerska","8475337361","2026-02-25"],
+    ["Rebecca coates","7082753799","2026-02-21"],
+    ["Rezi Useh","6122323241","2026-02-02"]
+  ];
+
+  function normPhone(p){ return (p||'').replace(/\D/g,'').slice(-10); }
+  function normName(n){ return (n||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+
+  if(!state||!state.events) return;
+
+  var matchedEvents=0, unmatchedCSV=[];
+
+  CSV.forEach(function(row){
+    var csvName=row[0], csvPhone=normPhone(row[1]), csvDate=row[2];
+    var iso=csvDate+'T12:00:00.000Z';
+
+    /* Find matching customer by phone first, then name */
+    var custMatch=null;
+    if(csvPhone&&state.customers){
+      custMatch=state.customers.find(function(c){ return normPhone(c.phone)===csvPhone; });
+    }
+    if(!custMatch&&state.customers){
+      var nn=normName(csvName);
+      custMatch=state.customers.find(function(c){ return normName(c.name)===nn; });
+    }
+
+    if(custMatch){
+      state.events.forEach(function(e){
+        if(e.customerId===custMatch.id||e.customer===custMatch.id){
+          e.createdAt=iso;
+          matchedEvents++;
+        }
+      });
+    } else {
+      /* Try matching directly on event name as last resort */
+      var nn=normName(csvName);
+      state.events.forEach(function(e){
+        var evName=normName(e.eventName||e.name||'');
+        if(evName&&nn&&(evName.includes(nn.split(' ')[0])||nn.includes(evName.split(' ')[0]))){
+          if(!e.createdAt){ e.createdAt=iso; matchedEvents++; }
+        }
+      });
+      unmatchedCSV.push(csvName);
+    }
+  });
+
+  try{ window.saveState(); }catch(ex){}
+  localStorage.setItem('lbt_createdAt_migrated_v1','1');
+  console.log('[LBT Migration] createdAt stamped on '+matchedEvents+' events. Unmatched CSV rows: '+unmatchedCSV.length, unmatchedCSV);
+
+  /* Download unmatched records as CSV */
+  if(unmatchedCSV.length>0){
+    var unmatched_full=CSV.filter(function(row){ return unmatchedCSV.indexOf(row[0])!==-1; });
+    var csvLines=['Customer Name,Phone Number,Date of Contact'];
+    unmatched_full.forEach(function(row){ csvLines.push('"'+row[0]+'","'+row[1]+'","'+row[2]+'"'); });
+    var blob=new Blob([csvLines.join('\n')],{type:'text/csv'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='unmatched_thumbtack_contacts.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+})();
+
+/* ── Weekly Metrics Charts ── */
+(function weeklyCharts(){
+
+  /* ── Timestamp stamping on event save ── */
+  function stampEvents(){
+    if(!state||!state.events) return;
+    var now=new Date().toISOString();
+    state.events.forEach(function(e){
+      if(!e.createdAt) e.createdAt=e.date?e.date+'T00:00:00.000Z':now;
+      if((e.status==='booked'||e.status==='completed')&&!e.bookedAt) e.bookedAt=e.date?e.date+'T00:00:00.000Z':now;
+    });
+  }
+
+  /* Patch saveEventPayloadFromForm to stamp new events */
+  var _origSave=window.saveEventPayloadFromForm;
+  window.saveEventPayloadFromForm=function(opts){
+    var isNew=!window.editingEventId;
+    var prevStatuses={};
+    if(!isNew&&state&&state.events){
+      state.events.forEach(function(e){ prevStatuses[e.id]=e.status; });
+    }
+    if(_origSave) _origSave.apply(this,arguments);
+    var now=new Date().toISOString();
+    if(state&&state.events){
+      state.events.forEach(function(e){
+        if(!e.createdAt) e.createdAt=now;
+        if((e.status==='booked'||e.status==='completed')&&!e.bookedAt){
+          if(isNew||prevStatuses[e.id]!==e.status) e.bookedAt=now;
+          else e.bookedAt=e.date?e.date+'T00:00:00.000Z':now;
+        }
+      });
+    }
+  };
+
+  /* ── Chart helpers ── */
+  function getMondayOf(d){
+    var dt=new Date(d); dt.setHours(0,0,0,0);
+    var day=dt.getDay(); var diff=day===0?-6:1-day;
+    dt.setDate(dt.getDate()+diff); return dt;
+  }
+  function addDays(d,n){ var dt=new Date(d); dt.setDate(dt.getDate()+n); return dt; }
+  function weekLabel(monday){
+    var sun=addDays(monday,6);
+    var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return mo[monday.getMonth()]+' '+monday.getDate()+'-'+sun.getDate();
+  }
+
+  var _charts={};
+  function destroyChart(id){ if(_charts[id]){ _charts[id].destroy(); delete _charts[id]; } }
+
+  function loadChartJS(cb){
+    if(window.Chart){ cb(); return; }
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';
+    s.onload=cb; document.head.appendChild(s);
+  }
+
+  function buildWeeks(n){
+    var today=new Date(); today.setHours(0,0,0,0);
+    var thisMonday=getMondayOf(today);
+    var weeks=[];
+    for(var i=n-1;i>=0;i--){
+      var start=addDays(thisMonday,-i*7);
+      var end=addDays(start,6); end.setHours(23,59,59,999);
+      weeks.push({start:start,end:end,label:weekLabel(start)});
+    }
+    return weeks;
+  }
+
+  function inWeek(isoStr,week){
+    if(!isoStr) return false;
+    var d=new Date(isoStr); return d>=week.start&&d<=week.end;
+  }
+
+  function renderCharts(){
+    var root=document.getElementById('dashboardRoot');
+    if(!root) return;
+    stampEvents();
+    var events=(state&&state.events)||[];
+    var weeks=buildWeeks(8);
+
+    /* Win Rate */
+    var wrRates=weeks.map(function(w){
+      var entered=events.filter(function(e){ return inWeek(e.createdAt,w); });
+      if(!entered.length) return null;
+      var booked=entered.filter(function(e){ return e.status==='booked'||e.status==='completed'; });
+      return Math.round(booked.length/entered.length*100);
+    });
+
+    /* Ad Cost % */
+    var acRates=weeks.map(function(w){
+      var allEntered=events.filter(function(e){ return inWeek(e.createdAt,w); });
+      var totalAd=allEntered.reduce(function(s,e){ return s+parseFloat(e.adCost||0); },0);
+      var bookedThisWeek=events.filter(function(e){
+        return (e.status==='booked'||e.status==='completed')&&inWeek(e.bookedAt||e.createdAt,w);
+      });
+      var totalQuote=bookedThisWeek.reduce(function(s,e){ return s+parseFloat(e.quote||0); },0);
+      if(!totalQuote) return null;
+      return Math.round(totalAd/totalQuote*100);
+    });
+
+    var labels=weeks.map(function(w){ return w.label; });
+
+    /* Inject chart panels if not present */
+    if(!document.getElementById('dbChartRow')){
+      var row=document.createElement('div');
+      row.id='dbChartRow';
+      row.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:4px;';
+      row.innerHTML=
+        '<div class="db-panel"><div class="db-panel-hdr"><span class="db-panel-title">📈 Weekly Win Rate</span><span class="db-kpi-label" style="margin:0;">booked ÷ entered</span></div><div style="position:relative;height:220px;"><canvas id="chartWinRate"></canvas></div><div class="small" style="color:var(--ink3);margin-top:8px;">% of events entered each week that were booked or completed. Historical events use event date as proxy.</div></div>'+
+        '<div class="db-panel"><div class="db-panel-hdr"><span class="db-panel-title">💸 Weekly Ad Cost %</span><span class="db-kpi-label" style="margin:0;">ad spend ÷ quoted revenue</span></div><div style="position:relative;height:220px;"><canvas id="chartAdCost"></canvas></div><div class="small" style="color:var(--ink3);margin-top:8px;">Ad spend for all entered events ÷ quoted revenue for booked/completed events that week.</div></div>';
+      root.appendChild(row);
+    }
+
+    loadChartJS(function(){
+      var chartOpts=function(label,color,data){
+        return {
+          type:'bar',
+          data:{
+            labels:labels,
+            datasets:[{
+              label:label,
+              data:data,
+              backgroundColor:color+'33',
+              borderColor:color,
+              borderWidth:2,
+              borderRadius:4,
+              spanGaps:true
+            }]
+          },
+          options:{
+            responsive:true,
+            maintainAspectRatio:false,
+            plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.parsed.y!==null?ctx.parsed.y+'%':'No data'; }}}},
+            scales:{
+              y:{min:0,max:100,ticks:{callback:function(v){ return v+'%'; }},grid:{color:'rgba(0,0,0,.06)'}},
+              x:{grid:{display:false}}
+            }
+          }
+        };
+      };
+
+      destroyChart('wr');
+      var c1=document.getElementById('chartWinRate');
+      if(c1){ _charts['wr']=new Chart(c1,chartOpts('Win Rate','#3b82f6',wrRates)); }
+
+      destroyChart('ac');
+      var c2=document.getElementById('chartAdCost');
+      if(c2){ _charts['ac']=new Chart(c2,chartOpts('Ad Cost %','#f59e0b',acRates)); }
+    });
+  }
+
+  /* Hook into dashboard render */
+  var _origRenderDash=window.renderDashboard;
+  window.renderDashboard=function(){
+    if(_origRenderDash) _origRenderDash.apply(this,arguments);
+    setTimeout(renderCharts,100);
+  };
+
+  setTimeout(renderCharts,1200);
 })();
 
 /* ── Follow Up Tab in Event Form ── */
