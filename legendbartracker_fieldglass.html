@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_011';
+  const BUILD='v20260611_012';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -3820,57 +3820,70 @@ renderAll();ensureEditableContractFields();
 (function dateEnteredField(){
   function toDateInput(iso){ return iso ? iso.slice(0,10) : ''; }
   function toISO(dateStr){ return dateStr ? dateStr+'T12:00:00.000Z' : ''; }
-  function todayISO(){ return new Date().toISOString().slice(0,10); }
+  function todayStr(){ return new Date().toISOString().slice(0,10); }
 
-  /* Auto-populate with today when form is cleared for a new event */
-  var origClear=window.clearEventForm;
-  window.clearEventForm=function(){
-    if(origClear) origClear.apply(this,arguments);
-    var f=document.getElementById('eCreatedAt');
-    if(f) f.value=todayISO();
-  };
-
-  /* Load createdAt into visible field when event is opened */
-  var origLoad=window.loadEventIntoForm;
-  window.loadEventIntoForm=function(){
-    if(origLoad) origLoad.apply(this,arguments);
+  /* Patch window.editEvent: after loading event data, set eCreatedAt from e.createdAt */
+  var origEditEvent=window.editEvent;
+  window.editEvent=function(id){
+    if(origEditEvent) origEditEvent.apply(this,arguments);
     setTimeout(function(){
       var f=document.getElementById('eCreatedAt');
       if(!f) return;
-      /* Find current event in state */
-      var id=window.editingEventId;
-      if(id&&state&&state.events){
-        var ev=state.events.find(function(e){ return e.id===id; });
-        f.value=ev&&ev.createdAt ? toDateInput(ev.createdAt) : todayISO();
-      } else {
-        f.value=todayISO();
-      }
-    },50);
+      var ev=state&&state.events&&state.events.find(function(e){ return e.id===id; });
+      f.value=ev&&ev.createdAt ? toDateInput(ev.createdAt) : todayStr();
+    },30);
   };
 
-  /* Save createdAt from visible field back to state on every save */
+  /* New-event button: set today when form is cleared */
+  var newBtn=document.getElementById('newEventBtn');
+  if(newBtn){
+    newBtn.addEventListener('click',function(){
+      setTimeout(function(){
+        var f=document.getElementById('eCreatedAt');
+        if(f) f.value=todayStr();
+      },30);
+    });
+  }
+
+  /* Save: read eCreatedAt and persist to e.createdAt BEFORE the original save runs,
+     then re-save so the value sticks. We intercept saveEventPayloadFromForm. */
   var origSave2=window.saveEventPayloadFromForm;
   window.saveEventPayloadFromForm=function(opts){
-    if(origSave2) origSave2.apply(this,arguments);
+    /* Stamp the field value onto the event in state before calling original save */
     var f=document.getElementById('eCreatedAt');
-    if(!f||!f.value) return;
-    var iso=toISO(f.value);
-    /* Find the event that was just saved and stamp createdAt */
-    var id=window.editingEventId;
-    if(state&&state.events){
-      var target=id
-        ? state.events.find(function(e){ return e.id===id; })
-        : state.events[state.events.length-1]; /* last = newly added */
+    var iso=f&&f.value ? toISO(f.value) : null;
+    /* Resolve the current event id (editingEventId is a let in the outer scope,
+       accessible via closure since this script runs in the same scope chain) */
+    var result=origSave2 ? origSave2.apply(this,arguments) : undefined;
+    if(iso&&state&&state.events){
+      /* After save, find the event that was just written and stamp createdAt */
+      var savedId=(result&&result.id)
+        ? result.id
+        : (state.events.length ? state.events[state.events.length-1].id : null);
+      /* Also try to match the most-recently-saved event by checking eDate */
+      var eDate=document.getElementById('eDate');
+      var eName=document.getElementById('eName');
+      var target=null;
+      if(savedId) target=state.events.find(function(e){ return e.id===savedId; });
+      if(!target&&eName&&eName.value){
+        var nm=eName.value.trim();
+        /* find most recent match by name */
+        for(var i=state.events.length-1;i>=0;i--){
+          if((state.events[i].eventName||'')=== nm){ target=state.events[i]; break; }
+        }
+      }
+      if(!target) target=state.events[state.events.length-1];
       if(target) target.createdAt=iso;
+      try{ window.saveState(); }catch(ex){}
     }
-    try{ window.saveState(); }catch(ex){}
+    return result;
   };
 
-  /* Set today on page load if form is in new-event state */
+  /* Set today on initial page load */
   setTimeout(function(){
     var f=document.getElementById('eCreatedAt');
-    if(f&&!f.value) f.value=todayISO();
-  },300);
+    if(f&&!f.value) f.value=todayStr();
+  },400);
 })();
 
 /* ── Weekly Metrics Charts ── */
