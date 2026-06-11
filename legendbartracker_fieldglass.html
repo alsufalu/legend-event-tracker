@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_012';
+  const BUILD='v20260611_013';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -3495,9 +3495,9 @@ renderAll();ensureEditableContractFields();
 
     var bookedEvents=events.filter(function(e){return e.status==='booked';});
     var thisMonthEvents=events.filter(function(e){return e.date&&e.date>=monthStart&&e.date<=monthEnd&&(e.status==='booked'||e.status==='completed');});
-    var monthRevenue=thisMonthEvents.reduce(function(s,e){return s+parseFloat(e.quote||0);},0);
+    var monthRevenue=thisMonthEvents.reduce(function(s,e){return s+parseFloat(e.quotationAmount||e.quote||0);},0);
     var pendingCollections=bookedEvents.reduce(function(s,e){
-      var bal=parseFloat(e.balanceDue||0)||Math.max(0,parseFloat(e.quote||0)-parseFloat(e.depositPaid||0)-parseFloat(e.finalPaid||0));
+      var bal=parseFloat(e.balanceDue||0)||Math.max(0,parseFloat(e.quotationAmount||e.quote||0)-parseFloat(e.depositAmountPaid||e.depositPaid||0)-parseFloat(e.finalAmountPaid||e.finalPaid||0));
       return s+bal;
     },0);
     var openFollowUps=events.filter(function(e){return e.followUpDate&&(e.followUpStatus||'open')==='open';});
@@ -3978,11 +3978,11 @@ renderAll();ensureEditableContractFields();
     /* Ad Cost % */
     var acRates=weeks.map(function(w){
       var allEntered=events.filter(function(e){ return inWeek(e.createdAt,w); });
-      var totalAd=allEntered.reduce(function(s,e){ return s+parseFloat(e.adCost||0); },0);
+      var totalAd=allEntered.reduce(function(s,e){ return s+parseFloat(e.advertisingCost||e.adCost||0); },0);
       var bookedThisWeek=events.filter(function(e){
         return (e.status==='booked'||e.status==='completed')&&inWeek(e.bookedAt||e.createdAt,w);
       });
-      var totalQuote=bookedThisWeek.reduce(function(s,e){ return s+parseFloat(e.quote||0); },0);
+      var totalQuote=bookedThisWeek.reduce(function(s,e){ return s+parseFloat(e.quotationAmount||e.quote||0); },0);
       if(!totalQuote) return null;
       return Math.round(totalAd/totalQuote*100);
     });
