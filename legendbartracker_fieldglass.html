@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_014';
+  const BUILD='v20260611_018';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -3505,6 +3505,16 @@ renderAll();ensureEditableContractFields();
     var openFollowUps=events.filter(function(e){return e.followUpDate&&(e.followUpStatus||'open')==='open';});
     var overdueFollowUps=openFollowUps.filter(function(e){return e.followUpDate<todayISO;});
 
+    /* Ad efficiency KPIs — lifetime totals */
+    var allCompleted=events.filter(function(e){return e.status==='completed';});
+    var allBookedOrCompleted=events.filter(function(e){return e.status==='booked'||e.status==='completed';});
+    var lifetimeTotalAd=events.reduce(function(s,e){return s+parseFloat(e.advertisingCost||e.adCost||0);},0);
+    /* Revenue denominator: booked + completed events, quotation field only, each event counted once */
+    var lifetimeTotalRev=allBookedOrCompleted.reduce(function(s,e){return s+parseFloat(e.quotationAmount||e.quote||0);},0);
+    var lifetimeAdPct=lifetimeTotalRev>0?Math.round(lifetimeTotalAd/lifetimeTotalRev*100):null;
+    /* Cost per acquisition: booked + completed (both are wins) */
+    var costPerAcq=allBookedOrCompleted.length>0?Math.round(lifetimeTotalAd/allBookedOrCompleted.length):null;
+
     /* Upcoming events (next 14 days, booked or deciding) */
     var upcoming=events.filter(function(e){
       if(!e.date) return false;
@@ -3531,6 +3541,8 @@ renderAll();ensureEditableContractFields();
     html+='<div class="db-kpi green"><div class="db-kpi-label">Revenue This Month</div><div class="db-kpi-value">'+fmt$(monthRevenue)+'</div><div class="db-kpi-sub">from quoted events</div></div>';
     html+='<div class="db-kpi yellow"><div class="db-kpi-label">Pending Collections</div><div class="db-kpi-value">'+fmt$(pendingCollections)+'</div><div class="db-kpi-sub">unpaid balances</div></div>';
     html+='<div class="db-kpi red"><div class="db-kpi-label">Open Follow-Ups</div><div class="db-kpi-value">'+openFollowUps.length+'</div><div class="db-kpi-sub">'+(overdueFollowUps.length?' ⚠ '+overdueFollowUps.length+' overdue':'all on track')+'</div></div>';
+    html+='<div class="db-kpi" style="border-top:3px solid #8b5cf6;"><div class="db-kpi-label">Lifetime Ad Cost %</div><div class="db-kpi-value">'+(lifetimeAdPct!==null?lifetimeAdPct+'%':'—')+'</div><div class="db-kpi-sub">ad spend ÷ booked+completed quotes</div></div>';
+    html+='<div class="db-kpi" style="border-top:3px solid #0891b2;"><div class="db-kpi-label">Cost Per Booking</div><div class="db-kpi-value">'+(costPerAcq!==null?fmt$(costPerAcq):'—')+'</div><div class="db-kpi-sub">ad spend ÷ booked+completed</div></div>';
     html+='</div>';
 
     /* Pipeline row */
@@ -3977,66 +3989,59 @@ renderAll();ensureEditableContractFields();
       return Math.round(booked.length/entered.length*100);
     });
 
-    /* Ad Cost % */
-    var acRates=weeks.map(function(w){
-      var allEntered=events.filter(function(e){ return inWeek(e.createdAt,w); });
-      var totalAd=allEntered.reduce(function(s,e){ return s+parseFloat(e.advertisingCost||e.adCost||0); },0);
-      var bookedThisWeek=events.filter(function(e){
-        return (e.status==='booked'||e.status==='completed')&&inWeek(e.bookedAt||e.createdAt,w);
-      });
-      var totalQuote=bookedThisWeek.reduce(function(s,e){ return s+parseFloat(e.quotationAmount||e.quote||0); },0);
-      if(!totalQuote) return null;
-      return Math.round(totalAd/totalQuote*100);
-    });
-
     var labels=weeks.map(function(w){ return w.label; });
 
     /* Inject chart panels if not present */
     if(!document.getElementById('dbChartRow')){
       var row=document.createElement('div');
       row.id='dbChartRow';
-      row.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:4px;';
+      row.style.cssText='margin-top:4px;';
       row.innerHTML=
-        '<div class="db-panel"><div class="db-panel-hdr"><span class="db-panel-title">📈 Weekly Win Rate</span><span class="db-kpi-label" style="margin:0;">booked ÷ entered</span></div><div style="position:relative;height:220px;"><canvas id="chartWinRate"></canvas></div><div class="small" style="color:var(--ink3);margin-top:8px;">% of events entered each week that were booked or completed. Historical events use event date as proxy.</div></div>'+
-        '<div class="db-panel"><div class="db-panel-hdr"><span class="db-panel-title">💸 Weekly Ad Cost %</span><span class="db-kpi-label" style="margin:0;">ad spend ÷ quoted revenue</span></div><div style="position:relative;height:220px;"><canvas id="chartAdCost"></canvas></div><div class="small" style="color:var(--ink3);margin-top:8px;">Ad spend for all entered events ÷ quoted revenue for booked/completed events that week.</div></div>';
+        '<div class="db-panel"><div class="db-panel-hdr"><span class="db-panel-title">📈 Weekly Win Rate</span><span class="db-kpi-label" style="margin:0;">booked ÷ entered leads</span></div><div style="position:relative;height:240px;"><canvas id="chartWinRate"></canvas></div><div class="small" style="color:var(--ink3);margin-top:8px;">% of leads entered each week that were eventually booked or completed.</div></div>';
       root.appendChild(row);
     }
 
-    loadChartJS(function(){
-      var chartOpts=function(label,color,data){
-        return {
-          type:'bar',
-          data:{
-            labels:labels,
-            datasets:[{
-              label:label,
-              data:data,
-              backgroundColor:color+'33',
-              borderColor:color,
-              borderWidth:2,
-              borderRadius:4,
-              spanGaps:true
-            }]
-          },
-          options:{
-            responsive:true,
-            maintainAspectRatio:false,
-            plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.parsed.y!==null?ctx.parsed.y+'%':'No data'; }}}},
-            scales:{
-              y:{min:0,max:100,ticks:{callback:function(v){ return v+'%'; }},grid:{color:'rgba(0,0,0,.06)'}},
-              x:{grid:{display:false}}
-            }
+    var chartOpts=function(label,color,data){
+      return {
+        type:'bar',
+        data:{
+          labels:labels,
+          datasets:[{
+            label:label,
+            data:data,
+            backgroundColor:color+'33',
+            borderColor:color,
+            borderWidth:2,
+            borderRadius:4,
+            spanGaps:true
+          }]
+        },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          animation:{duration:300},
+          plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.parsed.y!==null?ctx.parsed.y+'%':'No data'; }}}},
+          scales:{
+            y:{min:0,max:100,ticks:{callback:function(v){ return v+'%'; }},grid:{color:'rgba(0,0,0,.06)'}},
+            x:{grid:{display:false}}
           }
-        };
+        }
       };
+    };
 
-      destroyChart('wr');
+    loadChartJS(function(){
       var c1=document.getElementById('chartWinRate');
-      if(c1){ _charts['wr']=new Chart(c1,chartOpts('Win Rate','#3b82f6',wrRates)); }
-
-      destroyChart('ac');
-      var c2=document.getElementById('chartAdCost');
-      if(c2){ _charts['ac']=new Chart(c2,chartOpts('Ad Cost %','#f59e0b',acRates)); }
+      /* Update existing charts in-place; only create if they don't exist yet */
+      if(_charts['wr']&&c1&&_charts['wr'].canvas===c1){
+        _charts['wr'].data.labels=labels;
+        _charts['wr'].data.datasets[0].data=wrRates;
+        _charts['wr'].update('none');
+      } else {
+        if(_charts['wr']){ try{_charts['wr'].destroy();}catch(ex){} delete _charts['wr']; }
+        if(c1) _charts['wr']=new Chart(c1,chartOpts('Win Rate','#3b82f6',wrRates));
+      }
+      /* Ad Cost % chart removed — replaced by Lifetime Ad Cost % KPI card */
+      if(_charts['ac']){ try{_charts['ac'].destroy();}catch(ex){} delete _charts['ac']; }
     });
   }
 
@@ -4044,10 +4049,20 @@ renderAll();ensureEditableContractFields();
   var _origRenderDash=window.renderDashboard;
   window.renderDashboard=function(){
     if(_origRenderDash) _origRenderDash.apply(this,arguments);
-    setTimeout(renderCharts,100);
+    setTimeout(renderCharts,150);
   };
 
-  setTimeout(renderCharts,1200);
+  /* Watchdog: re-render charts if they went missing (e.g. after any innerHTML wipe) */
+  setInterval(function(){
+    var tab=document.getElementById('summaryTab');
+    if(!tab||tab.classList.contains('hidden')) return;
+    /* If the chart canvases lost their Chart.js instance, re-render */
+    var c1=document.getElementById('chartWinRate');
+    var missing=!c1||!_charts['wr']||(_charts['wr']&&_charts['wr'].canvas!==c1);
+    if(missing) renderCharts();
+  }, 2000);
+
+  setTimeout(renderCharts,1500);
 })();
 
 /* ── Follow Up Tab in Event Form ── */
