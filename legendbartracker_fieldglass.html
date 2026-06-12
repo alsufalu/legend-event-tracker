@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_045';
+  const BUILD='v20260612_047';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -922,26 +922,40 @@ tr:hover td { background:var(--surface2); }
         <div class="event-form-section" id="quotationPaymentSection">
           <div class="section-card-lite">
             <h3>Quotation &amp; Payment Details</h3>
-            <div class="row four">
-              <div class="field-wrap"><label class="field-label" for="eBookingSite">Booking site</label><input id="eBookingSite" placeholder="Booking site"></div>
-              <div class="field-wrap"><label class="field-label" for="eQuote">Quotation amount</label><input id="eQuote" placeholder="Quotation amount"></div>
-              <div class="field-wrap"><label class="field-label" for="eDepositRequired">Deposit required</label><input id="eDepositRequired" placeholder="Deposit required"></div>
-              <div class="field-wrap"><label class="field-label" for="eDepositPaid">Deposit paid so far</label><input id="eDepositPaid" placeholder="Deposit paid so far"></div>
-              <div class="field-wrap"><label class="field-label" for="eCosts">Event costs</label><input id="eCosts" placeholder="Event costs"></div>
-              <div class="field-wrap"><label class="field-label" for="eAdCost">Advertising cost</label><input id="eAdCost" placeholder="Advertising cost"></div>
-            </div>
-            <div class="row four">
-              <div class="field-wrap"><label class="field-label" for="eDepositDate">Deposit date paid</label><input id="eDepositDate" type="date"></div>
-              <div class="field-wrap"><label class="field-label" for="eDepositPaidBy">Deposit paid by</label><input id="eDepositPaidBy" placeholder="Deposit paid by"></div>
-              <div class="field-wrap"><label class="field-label" for="eFinalPaid">Final amount paid</label><input id="eFinalPaid" placeholder="Final amount paid"></div>
-              <div class="field-wrap"><label class="field-label" for="eFinalPaidDate">Final amount paid date</label><input id="eFinalPaidDate" type="date"></div>
-            </div>
-            <div class="row four">
-              <div class="field-wrap"><label class="field-label" for="eFinalMethod">Final payment method</label><input id="eFinalMethod" placeholder="Final payment method"></div>
-              <div class="field-wrap"><label class="field-label" for="eContractSentDate">Contract sent date</label><input id="eContractSentDate" type="date"></div>
 
-              <div class="field-wrap"><label class="field-label" for="eBalanceDue">Auto balance due</label><input id="eBalanceDue" disabled></div>
+            <!-- Booking source -->
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin:0 0 8px;">Booking</div>
+            <div class="row two" style="margin-bottom:18px;">
+              <div class="field-wrap"><label class="field-label" for="eBookingSite">Booking source / site</label><input id="eBookingSite" placeholder="e.g. Thumbtack, referral, website"></div>
+              <div class="field-wrap"><label class="field-label" for="eContractSentDate">Contract sent date</label><input id="eContractSentDate" type="date"></div>
             </div>
+
+            <!-- Quote & costs -->
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin:0 0 8px;">Quote &amp; Costs</div>
+            <div class="row four" style="margin-bottom:18px;">
+              <div class="field-wrap"><label class="field-label" for="eQuote">Quotation amount</label><input id="eQuote" placeholder="0.00"></div>
+              <div class="field-wrap"><label class="field-label" for="eCosts">Event costs (COGS)</label><input id="eCosts" placeholder="0.00"></div>
+              <div class="field-wrap"><label class="field-label" for="eAdCost">Advertising cost</label><input id="eAdCost" placeholder="0.00"></div>
+              <div class="field-wrap"><label class="field-label" for="eBalanceDue">Balance due (auto)</label><input id="eBalanceDue" disabled></div>
+            </div>
+
+            <!-- Deposit -->
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin:0 0 8px;">Deposit</div>
+            <div class="row four" style="margin-bottom:18px;">
+              <div class="field-wrap"><label class="field-label" for="eDepositRequired">Deposit required</label><input id="eDepositRequired" placeholder="0.00"></div>
+              <div class="field-wrap"><label class="field-label" for="eDepositPaid">Deposit amount paid</label><input id="eDepositPaid" placeholder="0.00"></div>
+              <div class="field-wrap"><label class="field-label" for="eDepositDate">Deposit date paid</label><input id="eDepositDate" type="date"></div>
+              <div class="field-wrap"><label class="field-label" for="eDepositPaidBy">Deposit paid by</label><input id="eDepositPaidBy" placeholder="e.g. Venmo, Zelle, cash"></div>
+            </div>
+
+            <!-- Final payment -->
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin:0 0 8px;">Final Payment</div>
+            <div class="row three">
+              <div class="field-wrap"><label class="field-label" for="eFinalPaid">Final amount paid</label><input id="eFinalPaid" placeholder="0.00"></div>
+              <div class="field-wrap"><label class="field-label" for="eFinalPaidDate">Final payment date</label><input id="eFinalPaidDate" type="date"></div>
+              <div class="field-wrap"><label class="field-label" for="eFinalMethod">Final payment method</label><input id="eFinalMethod" placeholder="e.g. Venmo, Zelle, cash, check"></div>
+            </div>
+
           </div>
         </div>
 
@@ -5229,12 +5243,15 @@ renderAll();ensureEditableContractFields();
   },600);
 })();
 
-/* ── Follow-up Report Patch: one row per follow-up entry ── */
+/* ── Follow-up Report Patch: inline-editable, one row per follow-up ── */
 (function followUpReportPatch(){
 
-  /* Expand ALL events' followUps[] into individual report rows,
-     with filtering + sorting baked in. Fully self-contained —
-     does NOT call getFollowUpRows or getFilteredFollowUpRows. */
+  /* Safe-escape for HTML attribute values */
+  function escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  var TYPE_OPTS=['','Call','Text','Email','Send contract','Send invoice','Collect deposit','Collect final payment','Confirm details','Other'];
+
+  /* Expand ALL events' followUps[] into individual report rows */
   function buildReportRows(){
     var cmap=customerMap();
     var rows=[];
@@ -5288,7 +5305,81 @@ renderAll();ensureEditableContractFields();
     return rows;
   }
 
-  /* Override renderFollowUps — fully self-contained */
+  /* Save one row's inline inputs back to state */
+  function saveRowEdits(evId, fuId, row, doRerender){
+    var ev=(state.events||[]).find(function(x){ return String(x.id)===String(evId); });
+    if(!ev) return;
+    var today=new Date().toISOString().slice(0,10);
+    if(fuId&&Array.isArray(ev.followUps)){
+      var fu=ev.followUps.find(function(f){ return f.id===fuId; });
+      if(fu){
+        var dEl=row.querySelector('.fu-rpt-date');
+        var tEl=row.querySelector('.fu-rpt-type');
+        var nEl=row.querySelector('.fu-rpt-notes');
+        var cEl=row.querySelector('.fu-rpt-done');
+        if(dEl) fu.date=dEl.value||'';
+        if(tEl) fu.type=tEl.value||'';
+        if(nEl) fu.notes=nEl.value.trim();
+        if(cEl){
+          var wasDone=fu.status==='completed';
+          var nowDone=cEl.checked;
+          fu.status=nowDone?'completed':'open';
+          if(nowDone&&!wasDone) fu.completedDate=today;
+          if(!nowDone) fu.completedDate='';
+        }
+      }
+    } else {
+      /* legacy single follow-up */
+      var cEl=row.querySelector('.fu-rpt-done');
+      if(cEl){
+        ev.followUpStatus=cEl.checked?'completed':'open';
+        if(cEl.checked) ev.followUpCompletedDate=today;
+        else ev.followUpCompletedDate='';
+      }
+    }
+    try{ if(typeof window._fuSyncPrimary==='function') window._fuSyncPrimary(ev); }catch(ex){}
+    try{ saveState(); }catch(ex){}
+    if(doRerender){ try{ renderFollowUps(); }catch(ex){} }
+    try{ if(typeof window._fuRenderList==='function') window._fuRenderList(); }catch(ex){}
+  }
+
+  /* Wire up interactivity on the report table (once via delegation) */
+  var _rptWired=false;
+  function wireTable(){
+    if(_rptWired) return; _rptWired=true;
+    var notesTimers={};
+
+    /* change: checkbox → re-render; date/type selects → re-render */
+    document.addEventListener('change',function(e){
+      var t=e.target; if(!t.closest) return;
+      if(!t.closest('#followUpsBody')) return;
+      var row=t.closest('tr[data-ev-id]'); if(!row) return;
+      saveRowEdits(row.getAttribute('data-ev-id'),row.getAttribute('data-fu-id')||'',row,true);
+    });
+
+    /* input on notes text: debounced save, no re-render */
+    document.addEventListener('input',function(e){
+      var t=e.target; if(!t.closest) return;
+      if(!t.classList.contains('fu-rpt-notes')) return;
+      if(!t.closest('#followUpsBody')) return;
+      var row=t.closest('tr[data-ev-id]'); if(!row) return;
+      var key=(row.getAttribute('data-ev-id')||'')+'_'+(row.getAttribute('data-fu-id')||'');
+      clearTimeout(notesTimers[key]);
+      notesTimers[key]=setTimeout(function(){ if(row.isConnected) saveRowEdits(row.getAttribute('data-ev-id'),row.getAttribute('data-fu-id')||'',row,false); },800);
+    });
+
+    /* blur: save without re-render (covers navigating away mid-edit) */
+    document.addEventListener('blur',function(e){
+      var t=e.target; if(!t.closest) return;
+      if(!t.closest('#followUpsBody')) return;
+      var row=t.closest('tr[data-ev-id]'); if(!row||!row.isConnected) return;
+      saveRowEdits(row.getAttribute('data-ev-id'),row.getAttribute('data-fu-id')||'',row,false);
+    },{capture:true});
+  }
+  wireTable();
+
+  /* renderFollowUps — inline editable rows */
+  var INP='padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;background:var(--surface);color:var(--ink);width:100%;box-sizing:border-box;';
   renderFollowUps=function(){
     var body=document.getElementById('followUpsBody'); if(!body) return;
     var sortBtn=document.getElementById('followUpSortDateBtn');
@@ -5300,61 +5391,41 @@ renderAll();ensureEditableContractFields();
     body.innerHTML=rows.map(function(r){
       var bucket=followUpBucket(r);
       var rowClass=bucket==='overdue'?'followup-overdue':bucket==='today'?'followup-today':bucket==='done'?'followup-done':'followup-upcoming';
-      var statusPill=bucket==='overdue'?'Overdue':bucket==='today'?'Due today':(r.followUpStatus==='completed'?'Completed':'Open');
       var evId=safe(r.id);
       var fuId=r._fuId?safe(r._fuId):'';
-      var actionBtn=r.followUpStatus!=='completed'
-        ?'<button type="button" onclick="markFollowUpComplete(\''+evId+'\',\''+fuId+'\')">Mark done</button>'
-        :'<button type="button" onclick="reopenFollowUp(\''+evId+'\',\''+fuId+'\')">Reopen</button>';
-      return '<tr class="'+rowClass+'">'
-        +'<td><strong>'+fmtDateWithDay(r.followUpDate)+'</strong></td>'
-        +'<td>'+safe(r.followUpType||'Follow up')+'</td>'
+      var isDone=r.followUpStatus==='completed';
+
+      /* Due date — editable */
+      var dateCell='<input type="date" class="fu-rpt-date" value="'+escAttr(r.followUpDate)+'" style="'+INP+'">';
+
+      /* Type — editable dropdown */
+      var typeOpts=TYPE_OPTS.map(function(t){ return '<option value="'+escAttr(t)+'"'+(r.followUpType===t?' selected':'')+'>'+(t||'— Type —')+'</option>'; }).join('');
+      var typeCell='<select class="fu-rpt-type" style="'+INP+'">'+typeOpts+'</select>';
+
+      /* Notes — editable */
+      var notesCell='<input type="text" class="fu-rpt-notes" value="'+escAttr(r.followUpNotes)+'" placeholder="Notes…" style="'+INP+'">';
+
+      /* Done — checkbox */
+      var doneCell='<label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">'
+        +'<input type="checkbox" class="fu-rpt-done"'+(isDone?' checked':'')+' style="width:16px;height:16px;cursor:pointer;accent-color:#16a34a;flex-shrink:0;">'
+        +'<span style="font-size:12px;color:'+(isDone?'#16a34a':'var(--ink2)')+';">'+(isDone?'Done':'Open')+'</span>'
+        +'</label>'
+        +(isDone&&r.followUpCompletedDate?'<div style="font-size:10px;color:var(--ink3);margin-top:2px;">'+fmtDate(r.followUpCompletedDate)+'</div>':'');
+
+      return '<tr class="'+rowClass+'" data-ev-id="'+evId+'" data-fu-id="'+fuId+'">'
+        +'<td style="min-width:130px;">'+dateCell+'</td>'
+        +'<td style="min-width:130px;">'+typeCell+'</td>'
         +'<td>'+fmtDateWithDay(r.date)+'</td>'
         +'<td><span class="linkish" onclick="editEvent(\''+evId+'\')">'+safe(r.eventName)+'</span></td>'
         +'<td>'+safe(r.customerPlainName)+'</td>'
         +'<td>'+safe(formatPhone(r.customerPhone))+'</td>'
-        +'<td><span class="pill '+safe(r.followUpStatus)+'">'+safe(statusPill)+'</span>'
-          +(r.followUpCompletedDate?'<div class="small">Done '+fmtDate(r.followUpCompletedDate)+'</div>':'')+'</td>'
-        +'<td>'+safe(r.followUpNotes)+'</td>'
-        +'<td><button type="button" onclick="editEvent(\''+evId+'\')">Edit event</button> '+actionBtn+'</td>'
+        +'<td style="min-width:90px;">'+doneCell+'</td>'
+        +'<td style="min-width:150px;">'+notesCell+'</td>'
+        +'<td><button type="button" onclick="editEvent(\''+evId+'\')">Goto event</button></td>'
         +'</tr>';
     }).join('')||'<tr><td colspan="9" class="small">No follow-ups match the selected filters.</td></tr>';
   };
-  /* Also assign to window for any callers that use window.renderFollowUps */
   window.renderFollowUps=renderFollowUps;
-
-  /* Override markFollowUpComplete(eventId, fuId) */
-  window.markFollowUpComplete=function(eventId,fuId){
-    var ev=(state.events||[]).find(function(x){ return String(x.id)===String(eventId); });
-    if(!ev) return;
-    if(fuId&&Array.isArray(ev.followUps)){
-      var fu=ev.followUps.find(function(f){ return f.id===fuId; });
-      if(fu){ fu.status='completed'; fu.completedDate=new Date().toISOString().slice(0,10); }
-    } else {
-      ev.followUpStatus='completed';
-      ev.followUpCompletedDate=new Date().toISOString().slice(0,10);
-    }
-    try{ if(typeof window._fuSyncPrimary==='function') window._fuSyncPrimary(ev); }catch(ex){}
-    try{ saveState(); }catch(ex){}
-    try{ renderFollowUps(); }catch(ex){}
-    try{ if(typeof window._fuRenderList==='function') window._fuRenderList(); }catch(ex){}
-  };
-
-  /* Override reopenFollowUp(eventId, fuId) */
-  window.reopenFollowUp=function(eventId,fuId){
-    var ev=(state.events||[]).find(function(x){ return String(x.id)===String(eventId); });
-    if(!ev) return;
-    if(fuId&&Array.isArray(ev.followUps)){
-      var fu=ev.followUps.find(function(f){ return f.id===fuId; });
-      if(fu){ fu.status='open'; fu.completedDate=''; }
-    } else {
-      ev.followUpStatus='open'; ev.followUpCompletedDate='';
-    }
-    try{ if(typeof window._fuSyncPrimary==='function') window._fuSyncPrimary(ev); }catch(ex){}
-    try{ saveState(); }catch(ex){}
-    try{ renderFollowUps(); }catch(ex){}
-    try{ if(typeof window._fuRenderList==='function') window._fuRenderList(); }catch(ex){}
-  };
 
 })();
 </script>
