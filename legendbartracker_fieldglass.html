@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_043';
+  const BUILD='v20260612_044';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -4347,6 +4347,7 @@ renderAll();ensureEditableContractFields();
     try{ saveState(); }catch(ex){}
     try{ if(typeof renderFollowUps==='function') renderFollowUps(); }catch(ex){}
   }
+  var _editingFuId=null;
 
   /* ─── sync primary follow-up fields (backward compat) ─── */
   function syncPrimary(ev){
@@ -4397,8 +4398,12 @@ renderAll();ensureEditableContractFields();
         +(f.notes?'<div style="font-size:12px;color:var(--ink2);margin-top:2px;">'+f.notes.replace(/</g,'&lt;')+'</div>':'')
         +(done&&f.completedDate?'<div style="font-size:11px;color:var(--ink3);margin-top:2px;">✓ Completed '+fmtD(f.completedDate)+'</div>':'')
         +'</div>'
+        +'<button type="button" data-fu-edit="'+f.id+'" title="Edit"'
+          +' style="font-size:11px;padding:3px 8px;border:1px solid var(--blue,#2563eb);background:#eff6ff;color:var(--blue,#2563eb);border-radius:4px;cursor:pointer;flex-shrink:0;">✏</button>'
         +(!done?'<button type="button" data-fu-done="'+f.id+'" title="Mark done"'
           +' style="font-size:11px;padding:3px 8px;border:1px solid #16a34a;background:#f0fdf4;color:#16a34a;border-radius:4px;cursor:pointer;white-space:nowrap;flex-shrink:0;">✓</button>':'')
+        +(done?'<button type="button" data-fu-reopen="'+f.id+'" title="Reopen"'
+          +' style="font-size:11px;padding:3px 8px;border:1px solid #f59e0b;background:#fffbeb;color:#d97706;border-radius:4px;cursor:pointer;flex-shrink:0;">↩</button>':'')
         +'<button type="button" data-fu-del="'+f.id+'" title="Delete"'
           +' style="font-size:11px;padding:3px 7px;border:1px solid var(--border);background:var(--surface);color:var(--ink3);border-radius:4px;cursor:pointer;flex-shrink:0;">✕</button>'
         +'</div>';
@@ -4438,6 +4443,7 @@ renderAll();ensureEditableContractFields();
       +'<input type="text" id="fuNewNotes" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;" placeholder="What to follow up on…"></div>'
       +'<div style="display:flex;align-items:center;gap:8px;">'
       +'<button type="button" id="fuAddBtn" class="primary" style="font-size:13px;padding:6px 14px;">Add Follow-up</button>'
+      +' <button type="button" id="fuCancelEditBtn" style="font-size:13px;padding:5px 13px;display:none;border:1px solid var(--border);background:var(--surface);color:var(--ink);border-radius:6px;cursor:pointer;">Cancel</button>'
       +'<span id="fuAddedMsg" style="font-size:12px;color:#34d399;display:none;">Added!</span>'
       +'</div>'
       +'</div>'
@@ -4453,18 +4459,32 @@ renderAll();ensureEditableContractFields();
       }
     });
 
-    /* Add follow-up */
+    /* Add / Update follow-up */
     document.getElementById('fuAddBtn').addEventListener('click',function(){
       var date=document.getElementById('fuNewDate').value;
       if(!date){ alert('Please pick a date.'); return; }
       var ev=getEv(); if(!ev) return;
       if(!Array.isArray(ev.followUps)) ev.followUps=[];
-      ev.followUps.push({
-        id:uid(), date:date,
-        type:document.getElementById('fuNewType').value,
-        notes:document.getElementById('fuNewNotes').value.trim(),
-        status:'open', completedDate:''
-      });
+      if(_editingFuId){
+        var fu=ev.followUps.find(function(f){ return f.id===_editingFuId; });
+        if(fu){
+          fu.date=date;
+          fu.type=document.getElementById('fuNewType').value;
+          fu.notes=document.getElementById('fuNewNotes').value.trim();
+        }
+        _editingFuId=null;
+        document.getElementById('fuAddBtn').textContent='Add Follow-up';
+        var cancelBtn=document.getElementById('fuCancelEditBtn');
+        if(cancelBtn) cancelBtn.style.display='none';
+        document.getElementById('fuAddSummaryTxt').textContent='＋ Add a follow-up';
+      } else {
+        ev.followUps.push({
+          id:uid(), date:date,
+          type:document.getElementById('fuNewType').value,
+          notes:document.getElementById('fuNewNotes').value.trim(),
+          status:'open', completedDate:''
+        });
+      }
       ev.followUps.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
       syncPrimary(ev);
       doSave();
@@ -4477,15 +4497,48 @@ renderAll();ensureEditableContractFields();
       setTimeout(function(){ msg.style.display='none'; },2000);
     });
 
-    /* Done / Delete delegation */
+    /* Cancel edit mode */
+    document.getElementById('fuCancelEditBtn').addEventListener('click',function(){
+      _editingFuId=null;
+      document.getElementById('fuNewDate').value='';
+      document.getElementById('fuNewType').value='';
+      document.getElementById('fuNewNotes').value='';
+      document.getElementById('fuAddBtn').textContent='Add Follow-up';
+      this.style.display='none';
+      document.getElementById('fuAddSummaryTxt').textContent='＋ Add a follow-up';
+      document.getElementById('fuAddDetails').open=false;
+    });
+
+    /* Edit / Done / Reopen / Delete delegation */
     document.getElementById('fuListPanel').addEventListener('click',function(e){
+      var editBtn=e.target.closest('[data-fu-edit]');
       var doneBtn=e.target.closest('[data-fu-done]');
+      var reopenBtn=e.target.closest('[data-fu-reopen]');
       var delBtn=e.target.closest('[data-fu-del]');
       var ev=getEv(); if(!ev||!Array.isArray(ev.followUps)) return;
+      if(editBtn){
+        var fid=editBtn.getAttribute('data-fu-edit');
+        var fu=ev.followUps.find(function(f){ return f.id===fid; });
+        if(!fu) return;
+        _editingFuId=fid;
+        document.getElementById('fuNewDate').value=fu.date||'';
+        document.getElementById('fuNewType').value=fu.type||'';
+        document.getElementById('fuNewNotes').value=fu.notes||'';
+        document.getElementById('fuAddBtn').textContent='Update Follow-up';
+        var cancelBtn=document.getElementById('fuCancelEditBtn');
+        if(cancelBtn) cancelBtn.style.display='inline';
+        document.getElementById('fuAddSummaryTxt').textContent='✏ Edit follow-up';
+        document.getElementById('fuAddDetails').open=true;
+        return;
+      }
       if(doneBtn){
         var fid=doneBtn.getAttribute('data-fu-done');
         var fu=ev.followUps.find(function(f){ return f.id===fid; });
         if(fu){ fu.status='completed'; fu.completedDate=todayStr(); }
+      } else if(reopenBtn){
+        var fid=reopenBtn.getAttribute('data-fu-reopen');
+        var fu=ev.followUps.find(function(f){ return f.id===fid; });
+        if(fu){ fu.status='open'; fu.completedDate=''; }
       } else if(delBtn){
         var fid=delBtn.getAttribute('data-fu-del');
         ev.followUps=ev.followUps.filter(function(f){ return f.id!==fid; });
@@ -4573,6 +4626,10 @@ renderAll();ensureEditableContractFields();
     document.addEventListener('DOMContentLoaded', initAll);
   } else { initAll(); }
   setTimeout(initAll,700);
+
+  /* expose for follow-up report patch */
+  window._fuSyncPrimary=syncPrimary;
+  window._fuRenderList=function(){ renderList(); };
 
 })();
 
@@ -5203,6 +5260,131 @@ renderAll();ensureEditableContractFields();
     btn.onclick=window.lbtSignOut;
     topbarRight.appendChild(btn);
   },600);
+})();
+
+/* ── Follow-up Report Patch: one row per follow-up entry ── */
+(function followUpReportPatch(){
+
+  /* Expand event.followUps[] into individual report rows */
+  function expandRows(){
+    var cmap=customerMap();
+    var rows=[];
+    enrichedEvents().forEach(function(ev){
+      var customer=cmap[ev.customerId]||{};
+      var base={
+        id:ev.id,
+        eventName:ev.eventName, name:ev.name,
+        date:ev.date, status:ev.status,
+        customerId:ev.customerId,
+        customerPlainName:customer.name||'',
+        customerPhone:customer.phone||'',
+        venueName:ev.venueName||'',
+        latestUpdate:ev.latestUpdate||''
+      };
+      if(Array.isArray(ev.followUps)&&ev.followUps.length){
+        ev.followUps.forEach(function(fu){
+          rows.push(Object.assign({},base,{
+            _fuId:fu.id,
+            followUpDate:fu.date||'',
+            followUpType:fu.type||'',
+            followUpNotes:fu.notes||'',
+            followUpStatus:fu.status||'open',
+            followUpCompletedDate:fu.completedDate||''
+          }));
+        });
+      } else if(ev.followUpDate||ev.followUpType||ev.followUpNotes){
+        /* legacy single follow-up (not yet migrated) */
+        rows.push(Object.assign({},base,{
+          _fuId:null,
+          followUpDate:ev.followUpDate||'',
+          followUpType:ev.followUpType||'',
+          followUpNotes:ev.followUpNotes||'',
+          followUpStatus:ev.followUpStatus||'open',
+          followUpCompletedDate:ev.followUpCompletedDate||''
+        }));
+      }
+    });
+    return rows;
+  }
+
+  /* Override getFollowUpRows — return one row per follow-up entry */
+  getFollowUpRows=function(){
+    var rows=expandRows();
+    rows.sort(function(a,b){
+      var ad=a.followUpDate||'9999-12-31';
+      var bd=b.followUpDate||'9999-12-31';
+      var dc=ad.localeCompare(bd);
+      var nc=String(a.eventName||'').localeCompare(String(b.eventName||''));
+      return (followUpSortDir==='desc'?-dc:dc)||nc;
+    });
+    return rows;
+  };
+
+  /* Override renderFollowUps — render per-fu rows with per-fu action buttons */
+  renderFollowUps=function(){
+    var body=document.getElementById('followUpsBody'); if(!body) return;
+    var sortBtn=document.getElementById('followUpSortDateBtn');
+    var sortLabel=document.getElementById('followUpSortLabel');
+    if(sortBtn) sortBtn.textContent=followUpSortDir==='desc'?'Sort by due date ↓':'Sort by due date ↑';
+    if(sortLabel) sortLabel.textContent=followUpSortDir==='desc'?'Newest due date first':'Oldest due date first';
+    var rows=getFilteredFollowUpRows();
+    body.innerHTML=rows.map(function(r){
+      var bucket=followUpBucket(r);
+      var rowClass=bucket==='overdue'?'followup-overdue':bucket==='today'?'followup-today':bucket==='done'?'followup-done':'followup-upcoming';
+      var statusPill=bucket==='overdue'?'Overdue':bucket==='today'?'Due today':(r.followUpStatus==='completed'?'Completed':'Open');
+      var evId=safe(r.id);
+      var fuId=r._fuId?safe(r._fuId):'';
+      var actionBtn=r.followUpStatus!=='completed'
+        ?'<button type="button" onclick="markFollowUpComplete(\''+evId+'\',\''+fuId+'\')">Mark done</button>'
+        :'<button type="button" onclick="reopenFollowUp(\''+evId+'\',\''+fuId+'\')">Reopen</button>';
+      return '<tr class="'+rowClass+'">'
+        +'<td><strong>'+fmtDateWithDay(r.followUpDate)+'</strong></td>'
+        +'<td>'+safe(r.followUpType||'Follow up')+'</td>'
+        +'<td>'+fmtDateWithDay(r.date)+'</td>'
+        +'<td><span class="linkish" onclick="editEvent(\''+evId+'\')">'+safe(r.eventName)+'</span></td>'
+        +'<td>'+safe(r.customerPlainName||r.customerName||'')+'</td>'
+        +'<td>'+safe(formatPhone(r.customerPhone))+'</td>'
+        +'<td><span class="pill '+safe(r.followUpStatus)+'">'+safe(statusPill)+'</span>'
+          +(r.followUpCompletedDate?'<div class="small">Done '+fmtDate(r.followUpCompletedDate)+'</div>':'')+'</td>'
+        +'<td>'+safe(r.followUpNotes)+'</td>'
+        +'<td><button type="button" onclick="editEvent(\''+evId+'\')">Edit event</button> '+actionBtn+'</td>'
+        +'</tr>';
+    }).join('')||'<tr><td colspan="9" class="small">No follow-ups match the selected filters.</td></tr>';
+  };
+
+  /* Override markFollowUpComplete(eventId, fuId) */
+  window.markFollowUpComplete=function(eventId,fuId){
+    var ev=(state.events||[]).find(function(x){ return String(x.id)===String(eventId); });
+    if(!ev) return;
+    if(fuId&&Array.isArray(ev.followUps)){
+      var fu=ev.followUps.find(function(f){ return f.id===fuId; });
+      if(fu){ fu.status='completed'; fu.completedDate=new Date().toISOString().slice(0,10); }
+    } else {
+      ev.followUpStatus='completed';
+      ev.followUpCompletedDate=new Date().toISOString().slice(0,10);
+    }
+    try{ if(typeof window._fuSyncPrimary==='function') window._fuSyncPrimary(ev); }catch(ex){}
+    try{ saveState(); }catch(ex){}
+    try{ renderFollowUps(); }catch(ex){}
+    try{ if(typeof window._fuRenderList==='function') window._fuRenderList(); }catch(ex){}
+  };
+
+  /* Override reopenFollowUp(eventId, fuId) */
+  window.reopenFollowUp=function(eventId,fuId){
+    var ev=(state.events||[]).find(function(x){ return String(x.id)===String(eventId); });
+    if(!ev) return;
+    if(fuId&&Array.isArray(ev.followUps)){
+      var fu=ev.followUps.find(function(f){ return f.id===fuId; });
+      if(fu){ fu.status='open'; fu.completedDate=''; }
+    } else {
+      ev.followUpStatus='open'; ev.followUpCompletedDate='';
+    }
+    try{ if(typeof window._fuSyncPrimary==='function') window._fuSyncPrimary(ev); }catch(ex){}
+    try{ saveState(); }catch(ex){}
+    try{ renderFollowUps(); }catch(ex){}
+    try{ if(typeof window._fuRenderList==='function') window._fuRenderList(); }catch(ex){}
+  };
+
 })();
 </script>
 
