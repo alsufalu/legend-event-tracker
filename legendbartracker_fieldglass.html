@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_033';
+  const BUILD='v20260611_034';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -4151,6 +4151,224 @@ renderAll();ensureEditableContractFields();
 
   /* Initial render — delay until after login likely complete */
   setTimeout(renderCharts,3000);
+})();
+
+/* ── Customer Communication Tab in Event Form ── */
+(function commTab(){
+  /* Add tab button */
+  var tabs = document.getElementById('eventFormTabs');
+  if(tabs){
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'event-form-tab';
+    btn.setAttribute('data-event-form-section','commSection');
+    btn.textContent = 'Communication';
+    tabs.appendChild(btn);
+  }
+
+  /* Build section HTML */
+  var section = document.createElement('div');
+  section.className = 'event-form-section';
+  section.id = 'commSection';
+  section.innerHTML = [
+    '<div class="section-card-lite">',
+    '<h3 style="margin-bottom:14px;">Log Communication</h3>',
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">',
+      '<div>',
+        '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--ink2);">Date</label>',
+        '<input type="date" id="commDate" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;">',
+      '</div>',
+      '<div>',
+        '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--ink2);">Type</label>',
+        '<select id="commType" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;">',
+          '<option value="">— Select type —</option>',
+          '<option value="Call">Call</option>',
+          '<option value="Text">Text</option>',
+          '<option value="Email">Email</option>',
+          '<option value="In Person">In Person</option>',
+          '<option value="Other">Other</option>',
+        '</select>',
+      '</div>',
+    '</div>',
+    '<div style="margin-bottom:12px;">',
+      '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--ink2);">Notes</label>',
+      '<textarea id="commNotes" rows="3" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;resize:vertical;" placeholder="What was discussed…"></textarea>',
+    '</div>',
+
+    /* Follow-up scheduling */
+    '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px;">',
+      '<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:0;" id="commFuToggleLabel">',
+        '<input type="checkbox" id="commFuToggle" style="width:15px;height:15px;accent-color:var(--blue);">',
+        'Schedule a follow-up',
+      '</label>',
+      '<div id="commFuFields" style="display:none;margin-top:12px;display:none;">',
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">',
+          '<div>',
+            '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--ink2);">Follow-up Date</label>',
+            '<input type="date" id="commFuDate" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;">',
+          '</div>',
+          '<div>',
+            '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--ink2);">Follow-up Type</label>',
+            '<select id="commFuType" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;">',
+              '<option value="">— Select type —</option>',
+              '<option value="Call">Call</option>',
+              '<option value="Text">Text</option>',
+              '<option value="Email">Email</option>',
+              '<option value="Send contract">Send contract</option>',
+              '<option value="Send invoice">Send invoice</option>',
+              '<option value="Collect deposit">Collect deposit</option>',
+              '<option value="Collect final payment">Collect final payment</option>',
+              '<option value="Confirm details">Confirm details</option>',
+              '<option value="Other">Other</option>',
+            '</select>',
+          '</div>',
+        '</div>',
+        '<div>',
+          '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--ink2);">Follow-up Notes</label>',
+          '<input type="text" id="commFuNotes" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;" placeholder="Optional notes for the follow-up…">',
+        '</div>',
+      '</div>',
+    '</div>',
+
+    '<button type="button" id="commLogBtn" class="primary">Log Communication</button>',
+    '<span id="commSaved" style="margin-left:12px;font-size:13px;color:#34d399;display:none;">Logged!</span>',
+
+    /* History */
+    '<h3 style="margin:18px 0 10px;">History</h3>',
+    '<div id="commHistory" style="display:flex;flex-direction:column;gap:8px;"></div>',
+    '</div>'
+  ].join('');
+
+  /* Insert before buttonbar */
+  var buttonbar = document.querySelector('.events-detail-pane .buttonbar');
+  if(buttonbar) buttonbar.parentNode.insertBefore(section, buttonbar);
+
+  /* Toggle follow-up fields */
+  document.getElementById('commFuToggle').addEventListener('change', function(){
+    var fields = document.getElementById('commFuFields');
+    fields.style.display = this.checked ? 'block' : 'none';
+    if(this.checked && !document.getElementById('commFuDate').value){
+      /* Default follow-up to 3 days from today */
+      var d = new Date(); d.setDate(d.getDate()+3);
+      document.getElementById('commFuDate').value = d.toISOString().slice(0,10);
+    }
+  });
+
+  /* Helper: get today's date string */
+  function todayStr(){ return new Date().toISOString().slice(0,10); }
+
+  /* Render comm history for current event */
+  function renderHistory(ev){
+    var hist = document.getElementById('commHistory');
+    if(!hist) return;
+    var logs = (ev && ev.commLog) || [];
+    if(!logs.length){ hist.innerHTML = '<div style="font-size:13px;color:var(--ink3);padding:8px 0;">No communications logged yet.</div>'; return; }
+    var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    function fmtD(s){ if(!s) return ''; var p=s.split('-'); return mo[parseInt(p[1],10)-1]+' '+parseInt(p[2],10)+', '+p[0]; }
+    hist.innerHTML = logs.slice().reverse().map(function(l,i){
+      var idx = logs.length-1-i;
+      return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">'
+        +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+        +'<span style="font-size:12px;font-weight:700;color:var(--blue);">'+(l.type||'Note')+'</span>'
+        +'<span style="font-size:12px;color:var(--ink3);">'+fmtD(l.date)+'</span>'
+        +(l.followUpDate?'<span style="margin-left:auto;font-size:11px;background:#fef9c3;color:#854d0e;border-radius:4px;padding:2px 6px;">→ Follow-up '+fmtD(l.followUpDate)+(l.followUpType?' · '+l.followUpType:'')+'</span>':'')
+        +'</div>'
+        +(l.notes?'<div style="font-size:13px;color:var(--ink2);">'+l.notes.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')+'</div>':'')
+        +'</div>';
+    }).join('');
+  }
+
+  /* Log button handler */
+  document.getElementById('commLogBtn').addEventListener('click', function(){
+    /* Find current event */
+    var evId = null;
+    if(typeof editingEventId !== 'undefined') evId = editingEventId;
+    if(!evId){ var saved = document.getElementById('fuSaved'); }
+    if(!evId || !window.state || !window.state.events) return;
+    var ev = window.state.events.find(function(e){ return e.id===evId; });
+    if(!ev) return;
+
+    var date = document.getElementById('commDate').value || todayStr();
+    var type = document.getElementById('commType').value;
+    var notes = document.getElementById('commNotes').value.trim();
+    if(!type && !notes){ alert('Please enter a type or notes.'); return; }
+
+    /* Append to commLog */
+    if(!ev.commLog) ev.commLog = [];
+    var entry = { date:date, type:type, notes:notes, loggedAt:new Date().toISOString() };
+
+    /* Handle follow-up scheduling */
+    var setFollowUp = document.getElementById('commFuToggle').checked;
+    if(setFollowUp){
+      var fuDate = document.getElementById('commFuDate').value;
+      var fuType = document.getElementById('commFuType').value;
+      var fuNotes = document.getElementById('commFuNotes').value.trim();
+      if(fuDate){
+        entry.followUpDate = fuDate;
+        entry.followUpType = fuType;
+        /* Update event's follow-up fields — marks any prior follow-up as done first */
+        if(ev.followUpDate && ev.followUpStatus !== 'completed'){
+          /* auto-complete the previous open follow-up */
+          ev.followUpCompletedDate = todayStr();
+        }
+        ev.followUpDate = fuDate;
+        ev.followUpType = fuType || ev.followUpType || '';
+        ev.followUpStatus = 'open';
+        ev.followUpNotes = fuNotes || notes;
+        /* Sync to hidden stubs */
+        document.getElementById('eFollowUpDate').value = fuDate;
+        var ftEl = document.getElementById('eFollowUpType');
+        if(ftEl){ ftEl.value = fuType; }
+        document.getElementById('eFollowUpStatus').value = 'open';
+        document.getElementById('eFollowUpNotes').value = fuNotes || notes;
+        /* Also update Follow Up tab visible fields */
+        var fuDateEl = document.getElementById('fuDate');
+        if(fuDateEl) fuDateEl.value = fuDate;
+        var fuTypeEl = document.getElementById('fuType');
+        if(fuTypeEl) fuTypeEl.value = fuType;
+        var fuStatusEl = document.getElementById('fuStatus');
+        if(fuStatusEl) fuStatusEl.value = 'open';
+        var fuNotesEl = document.getElementById('fuNotes');
+        if(fuNotesEl) fuNotesEl.value = fuNotes || notes;
+      }
+    }
+
+    ev.commLog.push(entry);
+    if(typeof window.saveState === 'function') window.saveState();
+
+    /* Reset form */
+    document.getElementById('commDate').value = '';
+    document.getElementById('commType').value = '';
+    document.getElementById('commNotes').value = '';
+    document.getElementById('commFuToggle').checked = false;
+    document.getElementById('commFuFields').style.display = 'none';
+    document.getElementById('commFuDate').value = '';
+    document.getElementById('commFuType').value = '';
+    document.getElementById('commFuNotes').value = '';
+
+    /* Show saved & refresh history */
+    renderHistory(ev);
+    var saved = document.getElementById('commSaved');
+    saved.style.display = 'inline';
+    setTimeout(function(){ saved.style.display = 'none'; }, 2000);
+  });
+
+  /* Populate when event loads */
+  var origEdit = window.editEvent;
+  window.editEvent = function(id){
+    if(origEdit) origEdit.apply(this, arguments);
+    setTimeout(function(){
+      /* Set today's date as default for new log entry */
+      document.getElementById('commDate').value = todayStr();
+      document.getElementById('commType').value = '';
+      document.getElementById('commNotes').value = '';
+      document.getElementById('commFuToggle').checked = false;
+      document.getElementById('commFuFields').style.display = 'none';
+      /* Render history */
+      var ev = window.state && window.state.events && window.state.events.find(function(e){ return e.id===id; });
+      renderHistory(ev);
+    }, 60);
+  };
 })();
 
 /* ── Follow Up Tab in Event Form ── */
