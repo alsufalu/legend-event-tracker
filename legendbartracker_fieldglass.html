@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_034';
+  const BUILD='v20260611_035';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -4153,20 +4153,153 @@ renderAll();ensureEditableContractFields();
   setTimeout(renderCharts,3000);
 })();
 
-/* ── Customer Communication Tab in Event Form ── */
-(function commTab(){
-  /* Add tab button */
-  var tabs = document.getElementById('eventFormTabs');
-  if(tabs){
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'event-form-tab';
-    btn.setAttribute('data-event-form-section','commSection');
-    btn.textContent = 'Communication';
-    tabs.appendChild(btn);
+/* ── Schedule Follow-up panel inside Customer Communication tab ── */
+(function commFollowUpPanel(){
+  /* Inject a "Schedule Follow-up" card below the comm table inside customerCommunicationSection */
+  function inject(){
+    var section = document.getElementById('customerCommunicationSection');
+    if(!section || document.getElementById('commFuPanel')) return;
+
+    var panel = document.createElement('div');
+    panel.id = 'commFuPanel';
+    panel.style.cssText = 'margin-top:16px;';
+    panel.innerHTML = [
+      '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;">',
+        '<div id="commFuCurrentBanner" style="display:none;background:#fef9c3;border:1px solid #fde68a;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:13px;color:#854d0e;"></div>',
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">',
+          '<span style="font-size:13px;font-weight:700;color:var(--ink);">📅 Schedule a Follow-up</span>',
+        '</div>',
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">',
+          '<div>',
+            '<label style="display:block;font-size:11px;font-weight:600;margin-bottom:3px;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em;">Follow-up Date</label>',
+            '<input type="date" id="commFuDate" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:13px;">',
+          '</div>',
+          '<div>',
+            '<label style="display:block;font-size:11px;font-weight:600;margin-bottom:3px;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em;">Type</label>',
+            '<select id="commFuType" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:13px;">',
+              '<option value="">— Select —</option>',
+              '<option value="Call">Call</option>',
+              '<option value="Text">Text</option>',
+              '<option value="Email">Email</option>',
+              '<option value="Send contract">Send contract</option>',
+              '<option value="Send invoice">Send invoice</option>',
+              '<option value="Collect deposit">Collect deposit</option>',
+              '<option value="Collect final payment">Collect final payment</option>',
+              '<option value="Confirm details">Confirm details</option>',
+              '<option value="Other">Other</option>',
+            '</select>',
+          '</div>',
+        '</div>',
+        '<div style="margin-bottom:10px;">',
+          '<label style="display:block;font-size:11px;font-weight:600;margin-bottom:3px;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em;">Notes</label>',
+          '<input type="text" id="commFuNotes" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:13px;" placeholder="What to follow up on…">',
+        '</div>',
+        '<div style="display:flex;align-items:center;gap:10px;">',
+          '<button type="button" id="commFuSaveBtn" class="primary" style="font-size:13px;padding:7px 16px;">Set Follow-up</button>',
+          '<button type="button" id="commFuClearBtn" style="font-size:13px;padding:7px 12px;">Clear Follow-up</button>',
+          '<span id="commFuSavedMsg" style="font-size:12px;color:#34d399;display:none;">Saved!</span>',
+        '</div>',
+      '</div>'
+    ].join('');
+
+    section.querySelector('.section-card-lite').appendChild(panel);
+
+    /* Set Follow-up */
+    document.getElementById('commFuSaveBtn').addEventListener('click', function(){
+      var fuDate = document.getElementById('commFuDate').value;
+      if(!fuDate){ alert('Please pick a follow-up date.'); return; }
+      var fuType = document.getElementById('commFuType').value;
+      var fuNotes = document.getElementById('commFuNotes').value.trim();
+      var evId; try{ evId = editingEventId; }catch(e){}
+      if(!evId || !window.state) return;
+      var ev = (window.state.events||[]).find(function(e){ return String(e.id)===String(evId); });
+      if(!ev) return;
+      ev.followUpDate = fuDate;
+      ev.followUpType = fuType;
+      ev.followUpNotes = fuNotes;
+      ev.followUpStatus = 'open';
+      ev.followUpCompletedDate = '';
+      /* Sync hidden stubs */
+      ['eFollowUpDate','eFollowUpType','eFollowUpNotes','eFollowUpStatus','eFollowUpCompletedDate'].forEach(function(id){
+        var el = document.getElementById(id); if(!el) return;
+        if(id==='eFollowUpDate') el.value = fuDate;
+        else if(id==='eFollowUpType') el.value = fuType;
+        else if(id==='eFollowUpNotes') el.value = fuNotes;
+        else if(id==='eFollowUpStatus') el.value = 'open';
+        else if(id==='eFollowUpCompletedDate') el.value = '';
+      });
+      /* Sync Follow Up tab visible fields */
+      ['fuDate','fuType','fuNotes'].forEach(function(id){
+        var el = document.getElementById(id); if(!el) return;
+        if(id==='fuDate') el.value = fuDate;
+        else if(id==='fuType') el.value = fuType;
+        else if(id==='fuNotes') el.value = fuNotes;
+      });
+      if(typeof window.saveState==='function') window.saveState();
+      refreshBanner(ev);
+      var msg = document.getElementById('commFuSavedMsg');
+      msg.style.display='inline';
+      setTimeout(function(){ msg.style.display='none'; }, 2000);
+    });
+
+    /* Clear Follow-up */
+    document.getElementById('commFuClearBtn').addEventListener('click', function(){
+      var evId; try{ evId = editingEventId; }catch(e){}
+      if(!evId || !window.state) return;
+      var ev = (window.state.events||[]).find(function(e){ return String(e.id)===String(evId); });
+      if(!ev) return;
+      ev.followUpDate = ''; ev.followUpType = ''; ev.followUpNotes = ''; ev.followUpStatus = 'open'; ev.followUpCompletedDate = '';
+      document.getElementById('commFuDate').value = '';
+      document.getElementById('commFuType').value = '';
+      document.getElementById('commFuNotes').value = '';
+      ['eFollowUpDate','eFollowUpType','eFollowUpNotes','eFollowUpCompletedDate'].forEach(function(id){
+        var el=document.getElementById(id); if(el) el.value='';
+      });
+      if(typeof window.saveState==='function') window.saveState();
+      refreshBanner(ev);
+    });
   }
 
-  /* Build section HTML */
+  function refreshBanner(ev){
+    var banner = document.getElementById('commFuCurrentBanner'); if(!banner) return;
+    if(ev && ev.followUpDate){
+      var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var p=ev.followUpDate.split('-');
+      var label=mo[parseInt(p[1],10)-1]+' '+parseInt(p[2],10)+', '+p[0];
+      banner.style.display='block';
+      banner.textContent='Current follow-up: '+label+(ev.followUpType?' · '+ev.followUpType:'')+(ev.followUpNotes?' — '+ev.followUpNotes:'');
+    } else {
+      banner.style.display='none';
+    }
+  }
+
+  function populate(id){
+    var fuDate = document.getElementById('commFuDate'); if(!fuDate) return;
+    var ev = window.state && (window.state.events||[]).find(function(e){ return String(e.id)===String(id); });
+    fuDate.value = (ev && ev.followUpDate) || '';
+    var ftEl = document.getElementById('commFuType'); if(ftEl) ftEl.value = (ev && ev.followUpType) || '';
+    var fnEl = document.getElementById('commFuNotes'); if(fnEl) fnEl.value = (ev && ev.followUpNotes) || '';
+    refreshBanner(ev);
+  }
+
+  /* Patch editEvent to populate when event opens */
+  function patchEditEvent(){
+    if(window.editEvent && window.editEvent.__commFuPatch) return;
+    var orig = window.editEvent;
+    window.editEvent = function(id){
+      if(orig) orig.apply(this, arguments);
+      setTimeout(function(){ inject(); populate(id); }, 80);
+    };
+    window.editEvent.__commFuPatch = true;
+    try{ editEvent = window.editEvent; }catch(ex){}
+  }
+
+  /* Inject immediately and after a delay to handle timing */
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ inject(); patchEditEvent(); });
+  else { inject(); patchEditEvent(); }
+  setTimeout(function(){ inject(); patchEditEvent(); }, 500);
+
+  /* build section HTML stub — keeping variable to avoid breaking rest of old IIFE body below */
   var section = document.createElement('div');
   section.className = 'event-form-section';
   section.id = 'commSection';
