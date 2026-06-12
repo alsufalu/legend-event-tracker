@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_038';
+  const BUILD='v20260612_040';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -748,6 +748,8 @@ tr:hover td { background:var(--surface2); }
       <div class="card stat"><div class="label">Unpaid booked revenue</div><div class="value" id="statUnpaidBooked">$0</div></div>
       <div class="card stat"><div class="label">Ad cost / booked revenue</div><div class="value" id="statAdRatio">0%</div></div>
       <div class="card stat"><div class="label">Total advertising cost</div><div class="value" id="statAdTotal">$0</div></div>
+      <div class="card stat" style="border-top:3px solid #dc2626;"><div class="label">Overhead Expenses YTD</div><div class="value" id="statOverheadYTD">$0</div></div>
+      <div class="card stat" style="border-top:3px solid #16a34a;"><div class="label">True Net Profit (after overhead)</div><div class="value" id="statTrueNetProfit">$0</div></div>
     </div>
 
     <!-- Summary Tab -->
@@ -1065,31 +1067,155 @@ tr:hover td { background:var(--surface2); }
       </div>
     </section>
 
-    <!-- Costs Tab (moved inside main-content) -->
+    <!-- Costs Tab -->
     <section id="costsTab" class="hidden">
-      <div class="card panel" style="margin-bottom:14px;">
-        <h2>General business costs</h2>
-        <div class="toolbar"><input id="costSearch" placeholder="Search costs..."></div>
-        <div class="row four">
-          <div class="field-wrap"><label class="field-label" for="gCostName">Cost name</label><input id="gCostName" placeholder="Insurance, garnish, etc."></div>
-          <div class="field-wrap"><label class="field-label" for="gCostCategory">Category</label><input id="gCostCategory" placeholder="Insurance, Garnish, Supplies"></div>
-          <div class="field-wrap"><label class="field-label" for="gCostAmount">Amount</label><input id="gCostAmount" placeholder="Amount"></div>
-          <div class="field-wrap"><label class="field-label" for="gCostDate">Date</label><input id="gCostDate" type="date"></div>
-        </div>
-        <div class="field-wrap"><label class="field-label" for="gCostNotes">Notes</label><textarea id="gCostNotes" placeholder="Notes"></textarea></div>
-        <div class="buttonbar" style="margin-top:10px;">
-          <button class="primary" id="saveCostBtn">Save cost</button>
-          <button id="clearCostBtn">Clear</button>
-        </div>
-      </div>
       <div class="card panel">
-        <h2>General costs table</h2>
+
+        <!-- KPI row -->
+        <div id="costKpiRow" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px;margin-bottom:18px;"></div>
+
+        <!-- Toolbar -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+          <input id="costSearch" placeholder="Search expenses…" style="flex:1;min-width:160px;">
+          <select id="costCatFilter" style="padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--ink);">
+            <option value="">All categories</option>
+          </select>
+          <select id="costPeriodFilter" style="padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--ink);">
+            <option value="">All time</option>
+            <option value="thisMonth">This month</option>
+            <option value="lastMonth">Last month</option>
+            <option value="thisYear">This year</option>
+            <option value="lastYear">Last year</option>
+          </select>
+          <button id="exportCostsCsvBtn">Export CSV</button>
+          <button class="primary" id="openCostFormBtn">+ Add Expense</button>
+        </div>
+
+        <!-- Add / Edit form (collapsible panel) -->
+        <div id="costFormPanel" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:18px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <h3 id="costFormTitle" style="margin:0;font-size:15px;">Add Expense</h3>
+            <button type="button" id="closeCostFormBtn" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink3);">✕</button>
+          </div>
+
+          <!-- Type toggle -->
+          <div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px;">
+            <button type="button" id="costTypeExpenseBtn" style="padding:7px 22px;font-size:13px;font-weight:600;border:none;background:var(--blue,#2563eb);color:#fff;cursor:pointer;">💳 Expense</button>
+            <button type="button" id="costTypeMileageBtn" style="padding:7px 22px;font-size:13px;font-weight:600;border:none;background:var(--surface);color:var(--ink2);cursor:pointer;">🚗 Mileage</button>
+          </div>
+          <input type="hidden" id="gCostType" value="expense">
+
+          <!-- Row 1: Date, Category, Vendor, Payment -->
+          <div class="row four" style="margin-bottom:10px;">
+            <div class="field-wrap">
+              <label class="field-label">Date *</label>
+              <input type="date" id="gCostDate">
+            </div>
+            <div class="field-wrap">
+              <label class="field-label">Category *</label>
+              <select id="gCostCategory">
+                <option value="">— Select —</option>
+                <option value="Bar Equipment &amp; Tools">Bar Equipment &amp; Tools</option>
+                <option value="Bar Supplies &amp; Materials">Bar Supplies &amp; Materials</option>
+                <option value="Transportation — Gas &amp; Fuel">Transportation — Gas &amp; Fuel</option>
+                <option value="Transportation — Mileage">Transportation — Mileage</option>
+                <option value="Marketing &amp; Advertising">Marketing &amp; Advertising</option>
+                <option value="Training &amp; Education">Training &amp; Education</option>
+                <option value="Insurance">Insurance</option>
+                <option value="Licensing &amp; Permits">Licensing &amp; Permits</option>
+                <option value="Software &amp; Technology">Software &amp; Technology</option>
+                <option value="Uniforms &amp; Apparel">Uniforms &amp; Apparel</option>
+                <option value="Office &amp; Administrative">Office &amp; Administrative</option>
+                <option value="Professional Services">Professional Services</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="field-wrap">
+              <label class="field-label">Vendor / Paid to</label>
+              <input type="text" id="gCostVendor" placeholder="Shell, Amazon, Google…">
+            </div>
+            <div class="field-wrap">
+              <label class="field-label">Payment Method</label>
+              <select id="gCostPaymentMethod">
+                <option value="">— Select —</option>
+                <option value="Cash">Cash</option>
+                <option value="Credit Card">Credit Card</option>
+                <option value="Debit Card">Debit Card</option>
+                <option value="Check">Check</option>
+                <option value="Venmo">Venmo</option>
+                <option value="Zelle">Zelle</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Row 2: Description + Amount / Mileage -->
+          <div class="row four" style="margin-bottom:10px;">
+            <div class="field-wrap" style="grid-column:span 2;">
+              <label class="field-label">Description *</label>
+              <input type="text" id="gCostName" placeholder="What was this expense for?">
+            </div>
+            <div class="field-wrap" id="costAmountWrap">
+              <label class="field-label">Amount ($) *</label>
+              <input type="number" id="gCostAmount" placeholder="0.00" step="0.01" min="0">
+            </div>
+            <div class="field-wrap hidden" id="costMilesWrap">
+              <label class="field-label">Miles *</label>
+              <input type="number" id="gCostMiles" placeholder="0" step="0.1" min="0">
+            </div>
+            <div class="field-wrap hidden" id="costRateWrap">
+              <label class="field-label">Rate (¢/mi)</label>
+              <input type="number" id="gCostMileageRate" placeholder="0.70" step="0.01" value="0.70">
+            </div>
+          </div>
+
+          <!-- Row 3: Linked event, Tax deductible, Notes -->
+          <div class="row four" style="margin-bottom:14px;">
+            <div class="field-wrap">
+              <label class="field-label">Linked Event</label>
+              <select id="gCostLinkedEventId">
+                <option value="">— None —</option>
+              </select>
+            </div>
+            <div class="field-wrap" style="display:flex;align-items:center;padding-top:20px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;">
+                <input type="checkbox" id="gCostTaxDeductible" style="width:15px;height:15px;accent-color:var(--blue);" checked>
+                Tax Deductible
+              </label>
+            </div>
+            <div class="field-wrap" style="grid-column:span 2;">
+              <label class="field-label">Notes</label>
+              <input type="text" id="gCostNotes" placeholder="Additional details…">
+            </div>
+          </div>
+
+          <div class="buttonbar">
+            <button class="primary" id="saveCostBtn">Save Expense</button>
+            <button id="clearCostBtn">Clear</button>
+            <span id="costSavedMsg" style="font-size:12px;color:#34d399;display:none;margin-left:8px;">✓ Saved!</span>
+          </div>
+        </div>
+
+        <!-- Expense table -->
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Date</th><th>Name</th><th>Category</th><th>Amount</th><th>Notes</th><th>Actions</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Date</th><th>Description</th><th>Category</th><th>Vendor</th>
+                <th>Payment</th><th>Linked Event</th><th style="text-align:right;">Amount</th><th>Actions</th>
+              </tr>
+            </thead>
             <tbody id="costsBody"></tbody>
+            <tfoot>
+              <tr style="background:var(--surface2);">
+                <td colspan="6" style="font-weight:700;text-align:right;padding:8px 10px;font-size:13px;color:var(--ink2);">Filtered total:</td>
+                <td style="font-weight:800;text-align:right;padding:8px 10px;font-size:13px;" id="costsTotalCell">$0.00</td>
+                <td></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
+
       </div>
     </section>
 
@@ -4178,6 +4304,7 @@ renderAll();ensureEditableContractFields();
   }
   function doSave(){
     try{ saveState(); }catch(ex){}
+    try{ if(typeof renderFollowUps==='function') renderFollowUps(); }catch(ex){}
   }
 
   /* ─── sync primary follow-up fields (backward compat) ─── */
@@ -4499,6 +4626,379 @@ renderAll();ensureEditableContractFields();
       document.getElementById('fuNotes').value         = document.getElementById('eFollowUpNotes').value || '';
     }, 50);
   };
+})();
+
+/* ── Business Costs Module ── */
+(function costsModule(){
+
+  var CATEGORIES=[
+    'Bar Equipment & Tools','Bar Supplies & Materials',
+    'Transportation — Gas & Fuel','Transportation — Mileage',
+    'Marketing & Advertising','Training & Education',
+    'Insurance','Licensing & Permits','Software & Technology',
+    'Uniforms & Apparel','Office & Administrative',
+    'Professional Services','Other'
+  ];
+  var CAT_ICONS={
+    'Bar Equipment & Tools':'🍸','Bar Supplies & Materials':'🧃',
+    'Transportation — Gas & Fuel':'⛽','Transportation — Mileage':'🚗',
+    'Marketing & Advertising':'📢','Training & Education':'🎓',
+    'Insurance':'🛡️','Licensing & Permits':'📋',
+    'Software & Technology':'💻','Uniforms & Apparel':'👔',
+    'Office & Administrative':'📁','Professional Services':'⚖️','Other':'📦'
+  };
+  var IRS_RATE=0.70; /* 2025 IRS standard mileage rate */
+
+  /* ── helpers ── */
+  function getAll(){ return state.overheadCosts||[]; }
+  function money(n){ return '$'+(Number(n)||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
+  function fmtD(s){
+    if(!s) return '—';
+    var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var p=s.split('-');
+    return mo[parseInt(p[1],10)-1]+' '+parseInt(p[2],10)+', '+p[0];
+  }
+  function safe(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function todayStr(){ return new Date().toISOString().slice(0,10); }
+  function thisYear(){ return new Date().getFullYear(); }
+  function thisMonth(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  function lastMonthStr(){
+    var d=new Date(); d.setMonth(d.getMonth()-1);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  }
+  function getEventName(id){
+    if(!id) return '';
+    var ev=(state.events||[]).find(function(e){ return String(e.id)===String(id); });
+    return ev?(ev.eventName||ev.name||'Event'):'';
+  }
+
+  /* ── filter helper ── */
+  function applyFilters(rows){
+    var q=(document.getElementById('costSearch')||{}).value||'';
+    q=q.toLowerCase().trim();
+    var cat=(document.getElementById('costCatFilter')||{}).value||'';
+    var period=(document.getElementById('costPeriodFilter')||{}).value||'';
+    if(q) rows=rows.filter(function(c){
+      return [c.name,c.description,c.category,c.vendor,c.notes,c.date,getEventName(c.linkedEventId)].join(' ').toLowerCase().includes(q);
+    });
+    if(cat) rows=rows.filter(function(c){ return c.category===cat; });
+    if(period){
+      var today=todayStr();
+      var ym=thisMonth();
+      var lm=lastMonthStr();
+      var yr=String(thisYear());
+      var lyr=String(thisYear()-1);
+      rows=rows.filter(function(c){
+        var d=c.date||'';
+        if(period==='thisMonth') return d.slice(0,7)===ym;
+        if(period==='lastMonth') return d.slice(0,7)===lm;
+        if(period==='thisYear') return d.slice(0,4)===yr;
+        if(period==='lastYear') return d.slice(0,4)===lyr;
+        return true;
+      });
+    }
+    return rows;
+  }
+
+  /* ── render KPI cards ── */
+  function renderKpis(){
+    var all=getAll();
+    var yr=String(thisYear());
+    var ym=thisMonth();
+    var ytd=all.filter(function(c){ return (c.date||'').slice(0,4)===yr; });
+    var mo=all.filter(function(c){ return (c.date||'').slice(0,7)===ym; });
+    var ytdTotal=ytd.reduce(function(s,c){ return s+(Number(c.amount)||0); },0);
+    var moTotal=mo.reduce(function(s,c){ return s+(Number(c.amount)||0); },0);
+    var mileageYTD=ytd.filter(function(c){ return c.type==='mileage'; }).reduce(function(s,c){ return s+(Number(c.miles)||0); },0);
+    var taxDed=ytd.filter(function(c){ return c.taxDeductible!==false; }).reduce(function(s,c){ return s+(Number(c.amount)||0); },0);
+    var kpiEl=document.getElementById('costKpiRow'); if(!kpiEl) return;
+    kpiEl.innerHTML=[
+      {label:'Total Expenses YTD',value:money(ytdTotal),color:'#dc2626',sub:yr},
+      {label:'This Month',value:money(moTotal),color:'#2563eb',sub:new Date().toLocaleString('default',{month:'long'})},
+      {label:'Tax Deductible YTD',value:money(taxDed),color:'#16a34a',sub:'Estimated'},
+      {label:'Miles Logged YTD',value:mileageYTD.toFixed(0)+' mi',color:'#7c3aed',sub:money(mileageYTD*IRS_RATE)+' equiv.'},
+      {label:'# Entries YTD',value:ytd.length,color:'#0891b2',sub:'All categories'}
+    ].map(function(k){
+      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:11px 13px;border-top:3px solid '+k.color+';">'
+        +'<div style="font-size:10px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">'+k.label+'</div>'
+        +'<div style="font-size:18px;font-weight:800;color:var(--ink);line-height:1;">'+k.value+'</div>'
+        +'<div style="font-size:10px;color:var(--ink3);margin-top:3px;">'+k.sub+'</div>'
+        +'</div>';
+    }).join('');
+  }
+
+  /* ── render table ── */
+  window.renderCosts=function(){
+    renderKpis();
+    var rows=applyFilters(getAll().slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }));
+    var total=rows.reduce(function(s,c){ return s+(Number(c.amount)||0); },0);
+    var tc=document.getElementById('costsTotalCell'); if(tc) tc.textContent=money(total);
+    var body=document.getElementById('costsBody'); if(!body) return;
+    if(!rows.length){
+      body.innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--ink3);">No expenses found. Click "+ Add Expense" to get started.</td></tr>';
+      return;
+    }
+    body.innerHTML=rows.map(function(c){
+      var isMileage=c.type==='mileage';
+      var icon=CAT_ICONS[c.category]||'📦';
+      var evName=getEventName(c.linkedEventId);
+      var tdMark=c.taxDeductible===false?'':'<span title="Tax deductible" style="color:#16a34a;font-size:11px;margin-left:4px;">✓TD</span>';
+      return '<tr>'
+        +'<td style="white-space:nowrap;">'+fmtD(c.date)+'</td>'
+        +'<td><strong>'+safe(c.name||c.description||'')+'</strong>'+tdMark
+          +(isMileage?'<div style="font-size:11px;color:var(--ink3);">'+safe(c.miles||'')+'mi @ $'+safe(c.mileageRate||IRS_RATE)+'/mi</div>':'')
+          +'</td>'
+        +'<td><span style="font-size:12px;">'+icon+'</span> '+safe(c.category)+'</td>'
+        +'<td>'+safe(c.vendor||'')+'</td>'
+        +'<td>'+safe(c.paymentMethod||'')+'</td>'
+        +'<td>'+(evName?'<span class="linkish" onclick="editEvent(\''+safe(c.linkedEventId)+'\')">'+safe(evName)+'</span>':'—')+'</td>'
+        +'<td style="text-align:right;font-weight:700;">'+money(c.amount)+'</td>'
+        +'<td><button onclick="editCost(\''+safe(c.id)+'\')">Edit</button> <button class="danger" onclick="deleteCost(\''+safe(c.id)+'\')">Del</button></td>'
+        +'</tr>';
+    }).join('');
+  };
+
+  /* ── type toggle ── */
+  function setType(type){
+    document.getElementById('gCostType').value=type;
+    var isExp=type==='expense';
+    document.getElementById('costTypeExpenseBtn').style.background=isExp?'var(--blue,#2563eb)':'var(--surface)';
+    document.getElementById('costTypeExpenseBtn').style.color=isExp?'#fff':'var(--ink2)';
+    document.getElementById('costTypeMileageBtn').style.background=!isExp?'var(--blue,#2563eb)':'var(--surface)';
+    document.getElementById('costTypeMileageBtn').style.color=!isExp?'#fff':'var(--ink2)';
+    document.getElementById('costAmountWrap').classList.toggle('hidden',!isExp);
+    document.getElementById('costMilesWrap').classList.toggle('hidden',isExp);
+    document.getElementById('costRateWrap').classList.toggle('hidden',isExp);
+    if(!isExp && !document.getElementById('gCostMileageRate').value)
+      document.getElementById('gCostMileageRate').value=IRS_RATE;
+    if(!isExp){
+      var catEl=document.getElementById('gCostCategory');
+      if(catEl && !catEl.value) catEl.value='Transportation — Mileage';
+    }
+  }
+
+  /* ── auto-calc mileage amount ── */
+  function calcMileageAmount(){
+    var mi=parseFloat(document.getElementById('gCostMiles').value)||0;
+    var rate=parseFloat(document.getElementById('gCostMileageRate').value)||IRS_RATE;
+    document.getElementById('gCostAmount').value=(mi*rate).toFixed(2);
+  }
+
+  /* ── populate event link dropdown ── */
+  function populateEventSelect(){
+    var sel=document.getElementById('gCostLinkedEventId'); if(!sel) return;
+    var cur=sel.value;
+    var events=(state.events||[]).slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+    sel.innerHTML='<option value="">— None —</option>'
+      +events.map(function(e){ return '<option value="'+safe(e.id)+'">'+safe((e.eventName||e.name||'Event')+' ('+((e.date||'').slice(5,10)||'')+')')+'</option>'; }).join('');
+    if(cur) sel.value=cur;
+  }
+
+  /* ── show / hide form ── */
+  function openForm(title){
+    populateEventSelect();
+    document.getElementById('costFormPanel').style.display='block';
+    document.getElementById('costFormTitle').textContent=title||'Add Expense';
+    document.getElementById('costFormPanel').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  function closeForm(){
+    document.getElementById('costFormPanel').style.display='none';
+  }
+
+  /* ── clear form ── */
+  window.clearCostForm=function(){
+    editingCostId=null;
+    document.getElementById('gCostType').value='expense';
+    document.getElementById('gCostDate').value=todayStr();
+    document.getElementById('gCostCategory').value='';
+    document.getElementById('gCostVendor').value='';
+    document.getElementById('gCostPaymentMethod').value='';
+    document.getElementById('gCostName').value='';
+    document.getElementById('gCostAmount').value='';
+    document.getElementById('gCostMiles').value='';
+    document.getElementById('gCostMileageRate').value=IRS_RATE;
+    document.getElementById('gCostLinkedEventId').value='';
+    document.getElementById('gCostTaxDeductible').checked=true;
+    document.getElementById('gCostNotes').value='';
+    setType('expense');
+    document.getElementById('costFormTitle').textContent='Add Expense';
+  };
+
+  /* ── editCost override ── */
+  window.editCost=function(id){
+    var c=(state.overheadCosts||[]).find(function(x){ return x.id===id; });
+    if(!c) return;
+    editingCostId=id;
+    openForm('Edit Expense');
+    var type=c.type||'expense';
+    document.getElementById('gCostType').value=type;
+    setType(type);
+    document.getElementById('gCostDate').value=c.date||'';
+    document.getElementById('gCostCategory').value=c.category||'';
+    document.getElementById('gCostVendor').value=c.vendor||'';
+    document.getElementById('gCostPaymentMethod').value=c.paymentMethod||'';
+    document.getElementById('gCostName').value=c.name||c.description||'';
+    document.getElementById('gCostAmount').value=c.amount!==undefined&&c.amount!==null?c.amount:'';
+    document.getElementById('gCostMiles').value=c.miles||'';
+    document.getElementById('gCostMileageRate').value=c.mileageRate||IRS_RATE;
+    document.getElementById('gCostLinkedEventId').value=c.linkedEventId||'';
+    document.getElementById('gCostTaxDeductible').checked=c.taxDeductible!==false;
+    document.getElementById('gCostNotes').value=c.notes||'';
+    switchTab('costs');
+  };
+
+  /* ── deleteCost override ── */
+  window.deleteCost=function(id){
+    if(!confirm('Delete this expense?')) return;
+    state.overheadCosts=(state.overheadCosts||[]).filter(function(c){ return c.id!==id; });
+    saveState(); renderCosts();
+    try{ patchStatOverhead(); }catch(ex){}
+  };
+
+  /* ── save handler (replaces original) ── */
+  function saveHandler(){
+    var type=document.getElementById('gCostType').value||'expense';
+    var date=document.getElementById('gCostDate').value;
+    var category=document.getElementById('gCostCategory').value;
+    var name=document.getElementById('gCostName').value.trim();
+    var isMileage=type==='mileage';
+    var miles=isMileage?(parseFloat(document.getElementById('gCostMiles').value)||0):0;
+    var rate=isMileage?(parseFloat(document.getElementById('gCostMileageRate').value)||IRS_RATE):0;
+    var amount=isMileage?(miles*rate):(parseFloat(document.getElementById('gCostAmount').value)||0);
+    if(!name) return alert('Please enter a description.');
+    if(!date) return alert('Please select a date.');
+    if(!category) return alert('Please select a category.');
+    if(isMileage && !miles) return alert('Please enter miles driven.');
+    if(!isMileage && !amount) return alert('Please enter an amount.');
+    var payload={
+      id: editingCostId||nextId('G',state.overheadCosts||[]),
+      type: type,
+      date: date,
+      category: category,
+      vendor: document.getElementById('gCostVendor').value.trim(),
+      paymentMethod: document.getElementById('gCostPaymentMethod').value,
+      name: name,
+      description: name,
+      amount: amount,
+      miles: isMileage?miles:undefined,
+      mileageRate: isMileage?rate:undefined,
+      linkedEventId: document.getElementById('gCostLinkedEventId').value||'',
+      taxDeductible: document.getElementById('gCostTaxDeductible').checked,
+      notes: document.getElementById('gCostNotes').value.trim()
+    };
+    if(editingCostId){
+      state.overheadCosts=(state.overheadCosts||[]).map(function(c){ return c.id===editingCostId?payload:c; });
+    } else {
+      if(!Array.isArray(state.overheadCosts)) state.overheadCosts=[];
+      state.overheadCosts.push(payload);
+    }
+    saveState(); renderCosts();
+    try{ patchStatOverhead(); }catch(ex){}
+    clearCostForm(); closeForm();
+    var msg=document.getElementById('costSavedMsg'); if(msg){ msg.style.display='inline'; setTimeout(function(){ msg.style.display='none'; },2000); }
+  }
+
+  /* ── patch Summary screen to show overhead costs ── */
+  function patchStatOverhead(){
+    var yr=String(thisYear());
+    var ytdTotal=(state.overheadCosts||[])
+      .filter(function(c){ return (c.date||'').slice(0,4)===yr; })
+      .reduce(function(s,c){ return s+(Number(c.amount)||0); },0);
+    var el=document.getElementById('statOverheadYTD');
+    if(el) el.textContent=money(ytdTotal);
+    var el2=document.getElementById('statTrueNetProfit');
+    if(el2){
+      var completedNetEl=document.getElementById('statNetProfitCompleted');
+      var completedNet=completedNetEl?parseFloat((completedNetEl.textContent||'').replace(/[$,]/g,''))||0:0;
+      el2.textContent=money(completedNet-ytdTotal);
+    }
+  }
+
+  /* ── patch renderStats to also update overhead ── */
+  if(typeof renderStats==='function'&&!renderStats.__overheadPatched){
+    var _origRS=renderStats;
+    window.renderStats=renderStats=function(){
+      _origRS.apply(this,arguments);
+      try{ patchStatOverhead(); }catch(ex){}
+    };
+    renderStats.__overheadPatched=true;
+  }
+
+  /* ── wire up UI once DOM is ready ── */
+  function init(){
+    /* Populate category filter */
+    var cf=document.getElementById('costCatFilter');
+    if(cf && cf.options.length<=1){
+      CATEGORIES.forEach(function(c){
+        var o=document.createElement('option'); o.value=c; o.textContent=c; cf.appendChild(o);
+      });
+    }
+
+    /* Replace save button listener */
+    var oldSave=document.getElementById('saveCostBtn');
+    if(oldSave){
+      var newSave=oldSave.cloneNode(true);
+      oldSave.parentNode.replaceChild(newSave,oldSave);
+      newSave.addEventListener('click',saveHandler);
+    }
+
+    /* Replace clear button listener */
+    var oldClear=document.getElementById('clearCostBtn');
+    if(oldClear){
+      var newClear=oldClear.cloneNode(true);
+      oldClear.parentNode.replaceChild(newClear,oldClear);
+      newClear.addEventListener('click',function(){ clearCostForm(); });
+    }
+
+    /* Open/close form */
+    var openBtn=document.getElementById('openCostFormBtn');
+    if(openBtn) openBtn.addEventListener('click',function(){
+      clearCostForm();
+      document.getElementById('gCostDate').value=todayStr();
+      openForm('Add Expense');
+    });
+    var closeBtn=document.getElementById('closeCostFormBtn');
+    if(closeBtn) closeBtn.addEventListener('click',closeForm);
+
+    /* Type toggle */
+    var expBtn=document.getElementById('costTypeExpenseBtn');
+    if(expBtn) expBtn.addEventListener('click',function(){ setType('expense'); });
+    var miBtn=document.getElementById('costTypeMileageBtn');
+    if(miBtn) miBtn.addEventListener('click',function(){ setType('mileage'); });
+
+    /* Mileage auto-calc */
+    ['gCostMiles','gCostMileageRate'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el) el.addEventListener('input',calcMileageAmount);
+    });
+
+    /* Filters */
+    var pf=document.getElementById('costPeriodFilter');
+    if(pf) pf.addEventListener('change',renderCosts);
+
+    /* Export CSV */
+    var expCsv=document.getElementById('exportCostsCsvBtn');
+    if(expCsv) expCsv.addEventListener('click',function(){
+      var rows=applyFilters(getAll().slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }));
+      var hdr=['Date','Description','Category','Vendor','Payment Method','Linked Event','Amount','Miles','Mileage Rate','Tax Deductible','Notes','Type'];
+      var csv=[hdr].concat(rows.map(function(c){
+        return [c.date||'',c.name||'',c.category||'',c.vendor||'',c.paymentMethod||'',
+          getEventName(c.linkedEventId),c.amount||0,c.miles||'',c.mileageRate||'',
+          c.taxDeductible!==false?'Yes':'No',c.notes||'',c.type||'expense'];
+      })).map(function(r){ return r.map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(','); }).join('\n');
+      var a=document.createElement('a');
+      a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+      a.download='legend_expenses_'+todayStr()+'.csv';
+      a.click();
+    });
+
+    renderCosts();
+    patchStatOverhead();
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else setTimeout(init,100);
+
 })();
 
 /* ── Supabase Cloud Auth + Sync ── */
