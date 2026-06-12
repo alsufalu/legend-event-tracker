@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_042';
+  const BUILD='v20260612_043';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -4239,7 +4239,7 @@ renderAll();ensureEditableContractFields();
         data:{ labels:labels, datasets:[{
           label:label, data:data,
           borderColor:color, backgroundColor:color+'22',
-          borderWidth:2.5, fill:true, tension:0.35, spanGaps:true,
+          borderWidth:2.5, fill:true, tension:0, spanGaps:true,
           pointRadius:5, pointHoverRadius:8,
           pointBackgroundColor:color, pointBorderColor:'#fff', pointBorderWidth:2
         }]},
