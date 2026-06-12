@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_036';
+  const BUILD='v20260612_038';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -3064,6 +3064,7 @@ renderAll();ensureEditableContractFields();
     var orig=window.editEvent;
     window.editEvent=function(id){
       saveCommsFromTable(); /* flush current event's comms BEFORE switching */
+      try{ saveState(); }catch(ex){} /* persist to localStorage */
       orig.apply(this,arguments);
       setTimeout(renderComms,20);
     };
@@ -4172,8 +4173,11 @@ renderAll();ensureEditableContractFields();
   function getEv(){
     try{
       var id=editingEventId;
-      return (window.state&&window.state.events||[]).find(function(e){ return String(e.id)===String(id); })||null;
+      return (state.events||[]).find(function(e){ return String(e.id)===String(id); })||null;
     }catch(e){ return null; }
+  }
+  function doSave(){
+    try{ saveState(); }catch(ex){}
   }
 
   /* ─── sync primary follow-up fields (backward compat) ─── */
@@ -4295,7 +4299,7 @@ renderAll();ensureEditableContractFields();
       });
       ev.followUps.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
       syncPrimary(ev);
-      if(typeof window.saveState==='function') window.saveState();
+      doSave();
       document.getElementById('fuNewDate').value='';
       document.getElementById('fuNewType').value='';
       document.getElementById('fuNewNotes').value='';
@@ -4319,7 +4323,7 @@ renderAll();ensureEditableContractFields();
         ev.followUps=ev.followUps.filter(function(f){ return f.id!==fid; });
       } else { return; }
       syncPrimary(ev);
-      if(typeof window.saveState==='function') window.saveState();
+      doSave();
       renderList();
     });
   }
@@ -4339,7 +4343,7 @@ renderAll();ensureEditableContractFields();
 
   function updateBanner(id){
     var banner=document.getElementById('evNameBanner'); if(!banner) return;
-    var ev=window.state&&(window.state.events||[]).find(function(e){ return String(e.id)===String(id); });
+    var ev=(state.events||[]).find(function(e){ return String(e.id)===String(id); });
     if(!ev){ banner.style.display='none'; return; }
     var name=(ev.eventName||ev.name||'Unnamed event').replace(/</g,'&lt;');
     var st=(ev.status||'').toLowerCase();
@@ -4353,7 +4357,7 @@ renderAll();ensureEditableContractFields();
 
   /* ─── populate panel when event opens ────────────────── */
   function populate(id){
-    var ev=window.state&&(window.state.events||[]).find(function(e){ return String(e.id)===String(id); });
+    var ev=(state.events||[]).find(function(e){ return String(e.id)===String(id); });
     /* Migrate old single follow-up to array */
     if(ev&&ev.followUpDate&&(!Array.isArray(ev.followUps)||!ev.followUps.length)){
       ev.followUps=[{
@@ -4378,11 +4382,29 @@ renderAll();ensureEditableContractFields();
     try{ editEvent=window.editEvent; }catch(ex){}
   }
 
+  /* ─── refresh banner whenever a tab button is clicked ─── */
+  document.addEventListener('click',function(e){
+    var btn=e.target.closest('.event-form-tab');
+    if(!btn) return;
+    setTimeout(function(){
+      var id; try{ id=editingEventId; }catch(x){}
+      if(id){ injectBanner(); updateBanner(id); }
+    },30);
+  });
+
   /* ─── init ────────────────────────────────────────────── */
+  function initAll(){
+    injectFollowUpPanel(); injectBanner(); patchEditEvent();
+    /* update banner for any already-open event */
+    setTimeout(function(){
+      var id; try{ id=editingEventId; }catch(x){}
+      if(id){ injectBanner(); updateBanner(id); populate(id); }
+    },200);
+  }
   if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',function(){ injectFollowUpPanel(); injectBanner(); patchEditEvent(); });
-  } else { injectFollowUpPanel(); injectBanner(); patchEditEvent(); }
-  setTimeout(function(){ injectFollowUpPanel(); injectBanner(); patchEditEvent(); },600);
+    document.addEventListener('DOMContentLoaded', initAll);
+  } else { initAll(); }
+  setTimeout(initAll,700);
 
 })();
 
