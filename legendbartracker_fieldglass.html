@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260611_030';
+  const BUILD='v20260611_033';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -3439,11 +3439,11 @@ renderAll();ensureEditableContractFields();
   var DASH_STYLES = `
   .db-wrap{font-family:inherit;}
   .db-section-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3,#888);margin:0 0 10px;}
-  .db-kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:12px;margin-bottom:20px;}
-  .db-kpi{background:var(--surface,#fff);border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:16px 18px;min-width:0;}
-  .db-kpi-label{font-size:11px;font-weight:600;color:var(--ink3,#888);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
-  .db-kpi-value{font-size:26px;font-weight:700;color:var(--ink,#0f172a);line-height:1;}
-  .db-kpi-sub{font-size:11px;color:var(--ink3,#888);margin-top:4px;}
+  .db-kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:8px;margin-bottom:14px;}
+  .db-kpi{background:var(--surface,#fff);border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:11px 13px;min-width:0;}
+  .db-kpi-label{font-size:10px;font-weight:600;color:var(--ink3,#888);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+  .db-kpi-value{font-size:18px;font-weight:700;color:var(--ink,#0f172a);line-height:1;}
+  .db-kpi-sub{font-size:10px;color:var(--ink3,#888);margin-top:3px;}
   .db-kpi.accent{border-left:3px solid #3b82f6;}
   .db-kpi.green{border-left:3px solid #22c55e;}
   .db-kpi.yellow{border-left:3px solid #f59e0b;}
@@ -3518,7 +3518,17 @@ renderAll();ensureEditableContractFields();
     var bookedEvents=events.filter(function(e){return e.status==='booked';});
     var thisMonthEvents=events.filter(function(e){return e.date&&e.date>=monthStart&&e.date<=monthEnd&&(e.status==='booked'||e.status==='completed');});
     var monthRevenue=thisMonthEvents.reduce(function(s,e){return s+parseFloat(e.quotationAmount||e.quote||0);},0);
-    var pendingCollections=bookedEvents.reduce(function(s,e){
+    // Pending Collections: booked events + completed events with no final payment yet
+    var pendingEvents=events.filter(function(e){
+      if(e.status==='booked') return true;
+      if(e.status==='completed'){
+        var hasFinalAmt=parseFloat(e.finalAmountPaid||e.finalPaid||0)>0;
+        var hasFinalDate=!!(e.finalAmountPaidDate||e.finalPaidDate);
+        return !hasFinalAmt&&!hasFinalDate;
+      }
+      return false;
+    });
+    var pendingCollections=pendingEvents.reduce(function(s,e){
       var bal=parseFloat(e.balanceDue||0)||Math.max(0,parseFloat(e.quotationAmount||e.quote||0)-parseFloat(e.depositAmountPaid||e.depositPaid||0)-parseFloat(e.finalAmountPaid||e.finalPaid||0));
       return s+bal;
     },0);
@@ -3536,6 +3546,9 @@ renderAll();ensureEditableContractFields();
     },0);
     var netYTD=revenueYTD-costsYTD;
     var marginYTD=revenueYTD>0?Math.round(netYTD/revenueYTD*100):null;
+    var yearLeads=yearEvents.length;
+    var yearWins=yearEvents.filter(function(e){return e.status==='booked'||e.status==='completed';}).length;
+    var winRateYTD=yearLeads>0?Math.round(yearWins/yearLeads*100):null;
 
     /* Ad efficiency KPIs — lifetime totals */
     var allCompleted=events.filter(function(e){return e.status==='completed';});
@@ -3577,6 +3590,7 @@ renderAll();ensureEditableContractFields();
     html+='<div class="db-kpi" style="border-top:3px solid #0e7490;"><div class="db-kpi-label">Revenue This Year</div><div class="db-kpi-value">'+fmt$(revenueYTD)+'</div><div class="db-kpi-sub">collected YTD · '+currentYear+'</div></div>';
     html+='<div class="db-kpi" style="border-top:3px solid #0f766e;"><div class="db-kpi-label">Net Amount YTD</div><div class="db-kpi-value">'+fmt$(netYTD)+'</div><div class="db-kpi-sub">collected − bartender costs</div></div>';
     html+='<div class="db-kpi" style="border-top:3px solid #15803d;"><div class="db-kpi-label">Profit Margin YTD</div><div class="db-kpi-value">'+(marginYTD!==null?marginYTD+'%':'—')+'</div><div class="db-kpi-sub">net ÷ revenue · '+currentYear+'</div></div>';
+    html+='<div class="db-kpi" style="border-top:3px solid #7c3aed;"><div class="db-kpi-label">Win Rate YTD</div><div class="db-kpi-value">'+(winRateYTD!==null?winRateYTD+'%':'—')+'</div><div class="db-kpi-sub">'+yearWins+' wins / '+yearLeads+' leads · '+currentYear+'</div></div>';
     html+='</div>';
 
     /* Pipeline row */
