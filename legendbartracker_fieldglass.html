@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260614_059';
+  const BUILD='v20260614_060';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -5968,21 +5968,40 @@ renderAll();ensureEditableContractFields();
 (function documentsModule(){
   var BUCKET='event-documents';
   var _open=false;
+  var _signedUrls={};  /* path → signedUrl cache */
 
   function sb(){ return window._sbClient||null; }
   function uid(){ return (window._sbCurrentUser&&window._sbCurrentUser.id)||null; }
 
-  /* Storage path: userId/eventId/filename */
   function storagePath(eventId,filename){
     return uid()+'/'+String(eventId)+'/'+filename;
   }
-
-  /* Sanitise filename so it's storage-safe */
   function safeName(name){
     return name.replace(/[^a-zA-Z0-9.\-_() ]/g,'_');
   }
+  function formatFileSize(bytes){
+    if(!bytes||bytes<1024) return (bytes||0)+'B';
+    if(bytes<1024*1024) return (bytes/1024).toFixed(1)+' KB';
+    return (bytes/(1024*1024)).toFixed(1)+' MB';
+  }
 
-  /* Show/hide the panel */
+  /* ── File type helpers ── */
+  function fileExt(name){ return (name.split('.').pop()||'').toLowerCase(); }
+  function fileKind(name){
+    var e=fileExt(name);
+    if(['jpg','jpeg','png','gif','webp','bmp','svg'].indexOf(e)>-1) return 'image';
+    if(e==='pdf') return 'pdf';
+    if(['doc','docx'].indexOf(e)>-1) return 'word';
+    if(['xls','xlsx'].indexOf(e)>-1) return 'excel';
+    if(['txt','csv','md'].indexOf(e)>-1) return 'text';
+    return 'other';
+  }
+  function fileIcon(name){
+    var k=fileKind(name);
+    return {image:'🖼',pdf:'📄',word:'📝',excel:'📊',text:'📃',other:'📎'}[k]||'📎';
+  }
+
+  /* ── Toggle panel ── */
   function toggle(){
     _open=!_open;
     var panel=document.getElementById('attachmentsPanel');
@@ -5993,7 +6012,6 @@ renderAll();ensureEditableContractFields();
     if(_open) renderList();
   }
 
-  /* Set status text */
   function setStatus(msg,ok){
     var el=document.getElementById('attachUploadStatus');
     if(!el) return;
@@ -6001,7 +6019,7 @@ renderAll();ensureEditableContractFields();
     el.style.color=ok===true?'#16a34a':ok===false?'#dc2626':'var(--ink3)';
   }
 
-  /* Render the list of uploaded files for the current editing event */
+  /* ── Render file list ── */
   async function renderList(){
     var listEl=document.getElementById('attachmentsList');
     if(!listEl) return;
@@ -6015,24 +6033,55 @@ renderAll();ensureEditableContractFields();
     }
     listEl.innerHTML='<div style="font-size:13px;color:var(--ink3);">Loading…</div>';
     try{
-      var prefix=uid()+'/'+String(editingEventId)+'/';
-      var res=await sb().storage.from(BUCKET).list(uid()+'/'+String(editingEventId),{limit:100,sortBy:{column:'created_at',order:'desc'}});
+      var folder=uid()+'/'+String(editingEventId);
+      var res=await sb().storage.from(BUCKET).list(folder,{limit:100,sortBy:{column:'name',order:'asc'}});
       if(res.error) throw res.error;
-      var files=res.data||[];
+      var files=(res.data||[]).filter(function(f){ return f.name&&f.name!=='.emptyFolderPlaceholder'; });
       if(!files.length){
         listEl.innerHTML='<div style="font-size:13px;color:var(--ink3);">No attachments yet.</div>';
         return;
       }
+
+      /* Batch-fetch signed URLs (1 hour expiry) for all files */
+      var paths=files.map(function(f){ return folder+'/'+f.name; });
+      var urlRes=await sb().storage.from(BUCKET).createSignedUrls(paths,3600);
+      var urlMap={};
+      if(urlRes.data){ urlRes.data.forEach(function(u){ if(u.signedUrl) urlMap[u.path]=u.signedUrl; }); }
+      _signedUrls=urlMap;
+
       listEl.innerHTML=files.map(function(f){
-        var path=prefix+f.name;
+        var path=folder+'/'+f.name;
+        var signedUrl=urlMap[path]||'';
         var size=f.metadata&&f.metadata.size?formatFileSize(f.metadata.size):'';
-        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;background:var(--surface2);">'
-          +'<div style="overflow:hidden;">'
-          +'<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+safe(f.name)+'</div>'
+        var kind=fileKind(f.name);
+        var icon=fileIcon(f.name);
+
+        /* Thumbnail for images */
+        var thumb=kind==='image'&&signedUrl
+          ? '<img src="'+signedUrl+'" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:5px;border:1px solid var(--border);flex-shrink:0;" onerror="this.style.display=\'none\'">'
+          : '<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">'+icon+'</div>';
+
+        /* Open button — varies by file type */
+        var openBtn='';
+        if(signedUrl){
+          if(kind==='image'||kind==='pdf'){
+            openBtn='<button type="button" data-attach-open="'+safe(signedUrl)+'" data-attach-kind="'+kind+'" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface);">👁 Open</button>';
+          } else if(kind==='word'||kind==='excel'){
+            openBtn='<button type="button" data-attach-open="'+safe(signedUrl)+'" data-attach-kind="'+kind+'" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface);">👁 Open</button>';
+          } else if(kind==='text'){
+            openBtn='<button type="button" data-attach-open="'+safe(signedUrl)+'" data-attach-kind="text" data-attach-name="'+safe(f.name)+'" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface);">👁 Preview</button>';
+          }
+        }
+
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;background:var(--surface2);">'
+          +thumb
+          +'<div style="flex:1;min-width:0;">'
+          +'<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+safe(f.name)+'">'+safe(f.name)+'</div>'
           +(size?'<div style="font-size:11px;color:var(--ink3);">'+safe(size)+'</div>':'')
           +'</div>'
-          +'<div style="display:flex;gap:6px;flex-shrink:0;margin-left:10px;">'
-          +'<button type="button" data-attach-download="'+safe(path)+'" data-attach-name="'+safe(f.name)+'" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface);">⬇ Download</button>'
+          +'<div style="display:flex;gap:6px;flex-shrink:0;">'
+          +openBtn
+          +'<button type="button" data-attach-download="'+safe(path)+'" data-attach-name="'+safe(f.name)+'" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface);">⬇</button>'
           +'<button type="button" data-attach-delete="'+safe(path)+'" data-attach-name="'+safe(f.name)+'" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface);color:#dc2626;">✕</button>'
           +'</div>'
           +'</div>';
@@ -6042,13 +6091,44 @@ renderAll();ensureEditableContractFields();
     }
   }
 
-  function formatFileSize(bytes){
-    if(bytes<1024) return bytes+'B';
-    if(bytes<1024*1024) return (bytes/1024).toFixed(1)+'KB';
-    return (bytes/(1024*1024)).toFixed(1)+'MB';
+  /* ── Open / Preview ── */
+  function openFile(signedUrl,kind,name){
+    if(kind==='image'||kind==='pdf'){
+      window.open(signedUrl,'_blank');
+    } else if(kind==='word'||kind==='excel'){
+      /* Microsoft Office Online viewer */
+      var viewerUrl='https://view.officeapps.live.com/op/view.aspx?src='+encodeURIComponent(signedUrl);
+      window.open(viewerUrl,'_blank');
+    } else if(kind==='text'){
+      /* Fetch and show in a modal overlay */
+      fetch(signedUrl)
+        .then(function(r){ return r.text(); })
+        .then(function(text){ showTextPreview(name,text); })
+        .catch(function(err){ alert('Preview failed: '+err.message); });
+    }
   }
 
-  /* Upload files */
+  /* Lightweight text preview overlay */
+  function showTextPreview(name,text){
+    var existing=document.getElementById('attachTextPreviewOverlay');
+    if(existing) existing.remove();
+    var overlay=document.createElement('div');
+    overlay.id='attachTextPreviewOverlay';
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    overlay.innerHTML='<div style="background:var(--surface,#fff);border-radius:12px;max-width:800px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);">'
+      +'<strong style="font-size:14px;">'+safe(name)+'</strong>'
+      +'<button id="attachTextPreviewClose" type="button" style="font-size:20px;background:none;border:none;cursor:pointer;color:var(--fg);line-height:1;">✕</button>'
+      +'</div>'
+      +'<pre style="margin:0;padding:16px;overflow:auto;font-family:DM Mono,monospace;font-size:12px;line-height:1.6;color:var(--fg);white-space:pre-wrap;word-break:break-word;">'+safe(text)+'</pre>'
+      +'</div>';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click',function(e){
+      if(e.target===overlay||e.target.id==='attachTextPreviewClose') overlay.remove();
+    });
+  }
+
+  /* ── Upload ── */
   async function uploadFiles(files){
     if(!sb()||!uid()){ alert('Please sign in to upload files.'); return; }
     if(!editingEventId){ alert('Please save the event before uploading attachments.'); return; }
@@ -6061,64 +6141,64 @@ renderAll();ensureEditableContractFields();
       try{
         var res=await sb().storage.from(BUCKET).upload(path,file,{upsert:true,contentType:file.type||'application/octet-stream'});
         if(res.error) throw res.error;
-      }catch(err){
-        failed.push(name+': '+(err.message||err));
-      }
+      }catch(err){ failed.push(name+': '+(err.message||err)); }
     }
     if(failed.length){ setStatus('Some files failed: '+failed.join('; '),false); }
-    else { setStatus('Upload complete ✓',true); setTimeout(function(){ setStatus('',null); },3000); }
+    else { setStatus('Uploaded ✓',true); setTimeout(function(){ setStatus('',null); },3000); }
     renderList();
   }
 
-  /* Download a file via signed URL */
+  /* ── Download ── */
   async function downloadFile(path,name){
     if(!sb()) return;
-    try{
+    /* Use cached URL if available, otherwise fetch fresh */
+    var url=_signedUrls[path];
+    if(!url){
       var res=await sb().storage.from(BUCKET).createSignedUrl(path,60);
-      if(res.error) throw res.error;
-      var a=document.createElement('a');
-      a.href=res.data.signedUrl;
-      a.download=name;
-      a.target='_blank';
-      a.click();
-    }catch(err){ alert('Download failed: '+(err.message||err)); }
+      if(res.error){ alert('Download failed: '+res.error.message); return; }
+      url=res.data.signedUrl;
+    }
+    var a=document.createElement('a');
+    a.href=url; a.download=name; a.target='_blank'; a.click();
   }
 
-  /* Delete a file */
+  /* ── Delete ── */
   async function deleteFile(path,name){
     if(!confirm('Delete "'+name+'"? This cannot be undone.')) return;
     if(!sb()) return;
     try{
       var res=await sb().storage.from(BUCKET).remove([path]);
       if(res.error) throw res.error;
+      delete _signedUrls[path];
       setStatus('Deleted.',true);
       setTimeout(function(){ setStatus('',null); },2000);
       renderList();
     }catch(err){ alert('Delete failed: '+(err.message||err)); }
   }
 
-  /* Re-render when a different event is loaded */
+  /* ── Re-render on event switch ── */
   var _origEditEvent2=window.editEvent;
   window.editEvent=function(id){
     if(_origEditEvent2) _origEditEvent2.apply(this,arguments);
+    _signedUrls={};
     if(_open) setTimeout(renderList,100);
   };
   try{ editEvent=window.editEvent; }catch(ex){}
 
-  /* Toggle click */
+  /* ── Event listeners ── */
   document.addEventListener('click',function(e){
     if(e.target.closest('#attachmentsToggle')){ toggle(); return; }
 
-    /* Download button */
+    var openBtn=e.target.closest('[data-attach-open]');
+    if(openBtn){ openFile(openBtn.dataset.attachOpen,openBtn.dataset.attachKind,openBtn.dataset.attachName||''); return; }
+
     var dlBtn=e.target.closest('[data-attach-download]');
     if(dlBtn){ downloadFile(dlBtn.dataset.attachDownload,dlBtn.dataset.attachName); return; }
 
-    /* Delete button */
     var delBtn=e.target.closest('[data-attach-delete]');
     if(delBtn){ deleteFile(delBtn.dataset.attachDelete,delBtn.dataset.attachName); return; }
   });
 
-  /* File input change */
   document.addEventListener('change',function(e){
     if(e.target&&e.target.id==='attachFileInput'){
       var files=e.target.files;
