@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_051';
+  const BUILD='v20260612_052';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -730,7 +730,6 @@ tr:hover td { background:var(--surface2); }
     <button class="tab" data-tab="events"><span class="tab-icon">📅</span> Events</button>
     <button class="tab" data-tab="followups"><span class="tab-icon">🔔</span> Follow Ups</button>
     <button class="tab" data-tab="costs"><span class="tab-icon">💰</span> Costs</button>
-    <button class="tab" data-tab="financial"><span class="tab-icon">📈</span> Financials</button>
   </div>
 
   <!-- Main content -->
@@ -882,7 +881,10 @@ tr:hover td { background:var(--surface2); }
         </div>
       </div>
       <div class="card panel event-subpanel hidden" data-event-panel="form" style="margin-bottom:14px;">
-        <h2 style="margin-bottom:8px;">Event form</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <h2 style="margin:0;">Event form</h2>
+          <button type="button" id="openFinancialPanelBtn" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--ink);cursor:pointer;">📊 Financial Readout</button>
+        </div>
 
         <div class="event-form-tabs" id="eventFormTabs">
           <button type="button" class="event-form-tab active" data-event-form-section="eventDetailsSection">Event Details</button>
@@ -1053,28 +1055,26 @@ tr:hover td { background:var(--surface2); }
         <div class="buttonbar" style="margin-top:12px;"></div>
       </div>
 
+        <!-- Financial Readout Panel -->
+        <div class="card panel event-subpanel hidden" data-event-panel="financial" style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div>
+              <h2 style="margin:0 0 4px;">Financial Readout</h2>
+              <div class="small" id="financialPanelSubtitle" style="color:var(--ink3);">Edit an event first to see its financial breakdown.</div>
+            </div>
+            <button type="button" id="financialBackToFormBtn" class="primary" style="font-size:12px;padding:5px 12px;">← Back to form</button>
+          </div>
+          <div id="financialReadoutContent" style="margin-top:12px;">
+            <div style="text-align:center;padding:40px 0;color:var(--ink3);">
+              <div style="font-size:36px;margin-bottom:10px;">📊</div>
+              <div style="font-size:14px;font-weight:600;margin-bottom:4px;">No event selected</div>
+              <div class="small">Open an event for editing, then click "📊 Financial Readout" to see its breakdown.</div>
+            </div>
+          </div>
+        </div>
+
         </div><!-- end events-detail-pane -->
       </div><!-- end events-split-layout -->
-    </section>
-
-    <!-- Financial Readout Tab -->
-    <section id="financialTab" class="hidden">
-      <div class="card panel">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
-          <div>
-            <h2 style="margin-bottom:4px;">Financial Readout</h2>
-            <div class="small" id="financialTabSubtitle" style="color:var(--ink3);">Open and edit an event, then click Financials to see its breakdown.</div>
-          </div>
-          <button type="button" id="financialGotoEventBtn" class="primary" style="display:none;">← Back to event</button>
-        </div>
-        <div id="financialReadoutContent">
-          <div style="text-align:center;padding:48px 0;color:var(--ink3);">
-            <div style="font-size:40px;margin-bottom:12px;">📊</div>
-            <div style="font-size:15px;font-weight:600;margin-bottom:6px;">No event selected</div>
-            <div class="small">Go to Events, open an event for editing, then come back here.</div>
-          </div>
-        </div>
-      </div>
     </section>
 
     <!-- Follow Ups Tab (moved inside main-content) -->
@@ -1676,7 +1676,7 @@ function enrichedEvents() {
   }).sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")));
 }
 function switchTab(tab) {
-  ["summary","customers","bartenders","events","followups","costs","financial"].forEach(name => {
+  ["summary","customers","bartenders","events","followups","costs"].forEach(name => {
     document.getElementById(name + "Tab").classList.add("hidden");
   });
   document.getElementById(tab + "Tab").classList.remove("hidden");
@@ -2699,8 +2699,8 @@ renderAll();ensureEditableContractFields();
 })();
 
 (function finalLegendTrackerTabFix(){
-  const mainTabs=["summary","customers","bartenders","events","costs","financial"];
-  const eventPanels=["lead","form","list"];
+  const mainTabs=["summary","customers","bartenders","events","costs"];
+  const eventPanels=["lead","form","list","financial"];
   const formSections=["eventDetailsSection","quotationPaymentSection","staffAssignmentSection","overtimeTrackingSection","contractQuoteBuilderSection","customerCommunicationSection"];
   function showMainTab(tab){if(!mainTabs.includes(tab))tab="summary";mainTabs.forEach(name=>{const panel=document.getElementById(name+"Tab");if(panel)panel.classList.toggle("hidden",name!==tab);});document.querySelectorAll(".tabs .tab[data-tab]").forEach(btn=>{btn.classList.toggle("active",btn.dataset.tab===tab);});document.body.classList.toggle("summary-active",tab==="summary");}
   function showEventPanel(panelName){if(!eventPanels.includes(panelName))panelName="form";document.querySelectorAll("#eventsTab .event-subpanel[data-event-panel]").forEach(panel=>{panel.classList.toggle("hidden",panel.dataset.eventPanel!==panelName);});document.querySelectorAll("#eventSubtabs .subtab[data-event-subtab]").forEach(btn=>{btn.classList.toggle("active",btn.dataset.eventSubtab===panelName);});}
@@ -5465,7 +5465,7 @@ renderAll();ensureEditableContractFields();
 
 })();
 
-/* ── Financial Readout Tab ── */
+/* ── Financial Readout Panel (within Events) ── */
 (function financialReadoutTab(){
   function money2(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function pct(n){ return Number(n||0).toFixed(1)+'%'; }
@@ -5474,27 +5474,32 @@ renderAll();ensureEditableContractFields();
     try{ return editingEventId?(state.events||[]).find(function(x){return String(x.id)===String(editingEventId);})||null:null; }catch(e){ return null; }
   }
 
+  function showPanel(name){
+    try{
+      if(typeof window.switchEventSubtab==='function') window.switchEventSubtab(name);
+      else{
+        document.querySelectorAll('.event-subpanel[data-event-panel]').forEach(function(p){ p.classList.toggle('hidden',p.dataset.eventPanel!==name); });
+      }
+    }catch(e){}
+  }
+
   function render(){
     var el=document.getElementById('financialReadoutContent');
     if(!el) return;
     var ev=getEv();
 
-    /* Update subtitle and back button */
-    var subtitle=document.getElementById('financialTabSubtitle');
-    var backBtn=document.getElementById('financialGotoEventBtn');
+    var subtitle=document.getElementById('financialPanelSubtitle');
 
     if(!ev){
-      if(subtitle) subtitle.textContent='Open and edit an event, then click Financials to see its breakdown.';
-      if(backBtn) backBtn.style.display='none';
-      el.innerHTML='<div style="text-align:center;padding:48px 0;color:var(--ink3);"><div style="font-size:40px;margin-bottom:12px;">📊</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;">No event selected</div><div class="small">Go to Events, open an event for editing, then come back here.</div></div>';
+      if(subtitle) subtitle.textContent='Edit an event first to see its financial breakdown.';
+      el.innerHTML='<div style="text-align:center;padding:40px 0;color:var(--ink3);"><div style="font-size:36px;margin-bottom:10px;">📊</div><div style="font-size:14px;font-weight:600;margin-bottom:4px;">No event selected</div><div class="small">Open an event for editing, then click "📊 Financial Readout" to see its breakdown.</div></div>';
       return;
     }
 
     var cmap=typeof customerMap==='function'?customerMap():{};
     var customer=cmap[ev.customerId]||{};
-    var evLabel=(ev.eventName||'Event')+(customer.name?' — '+customer.name:'')+(ev.date?' ('+ev.date+')':'');
-    if(subtitle) subtitle.textContent='Showing: '+evLabel;
-    if(backBtn){ backBtn.style.display=''; backBtn.onclick=function(){ if(typeof switchTab==='function') switchTab('events'); }; }
+    var evLabel=(ev.eventName||'Event')+(customer.name?' — '+customer.name:'')+(ev.date?' · '+ev.date:'');
+    if(subtitle) subtitle.textContent=evLabel;
 
     var revenue   = parseFloat(ev.quotationAmount)||0;
     var deposit   = parseFloat(ev.depositAmountPaid)||0;
@@ -5525,72 +5530,64 @@ renderAll();ensureEditableContractFields();
     var CARD='background:var(--bg2,#f8fafc);border:1px solid var(--border);border-radius:10px;padding:18px 22px;margin-bottom:14px;';
     var GRID3='display:grid;grid-template-columns:repeat(3,1fr);gap:16px;';
     var GRID2='display:grid;grid-template-columns:repeat(2,1fr);gap:16px;';
-    var DIVIDER='border:none;border-top:1px solid var(--border);margin:14px 0;';
+    var HR='border:none;border-top:1px solid var(--border);margin:14px 0;';
 
     function card(label,val,valStyle){ return '<div><div style="'+G+'">'+label+'</div><div style="'+(valStyle||V)+'">'+val+'</div></div>'; }
-    function sectionHead(title,color){ return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:'+(color||'var(--ink3)')+';margin-bottom:14px;">'+title+'</div>'; }
+    function head(title){ return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin-bottom:14px;">'+title+'</div>'; }
 
     el.innerHTML=
-      /* Revenue block */
-      '<div style="'+CARD+'">'+
-        sectionHead('Revenue')+
+      '<div style="'+CARD+'">'+head('Revenue')+
         '<div style="'+GRID3+'">'+
           card('Total Quote',money2(revenue))+
           card('Amount Collected',money2(collected),balance>0?V:VG)+
-          card('Balance Due',balance>0?money2(balance):money2(0),balance>0?VR:V)+
+          card('Balance Due',money2(balance),balance>0?VR:V)+
         '</div>'+
-        (deposit||finalPaid?'<hr style="'+DIVIDER+'"><div style="'+GRID2+'">'+
-          card('Deposit Received',money2(deposit))+
-          card('Final Payment',money2(finalPaid))+
-        '</div>':'') +
+        (deposit||finalPaid?'<hr style="'+HR+'"><div style="'+GRID2+'">'+card('Deposit Received',money2(deposit))+card('Final Payment',money2(finalPaid))+'</div>':'')+
       '</div>'+
-
-      /* Costs block */
-      '<div style="'+CARD+'">'+
-        sectionHead('Costs')+
+      '<div style="'+CARD+'">'+head('Costs')+
         '<div style="'+GRID3+'">'+
           card('Employee Labor',money2(laborCost))+
           card('Event Costs (COGS)',money2(eventCosts))+
           card('Advertising Cost',money2(adCost))+
         '</div>'+
-        '<hr style="'+DIVIDER+'">'+
-        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">'+
+        '<hr style="'+HR+'">'+
+        '<div style="'+GRID3+'">'+
           card('Total Costs',money2(totalCosts),'font-size:20px;font-weight:700;color:#b45309;')+
           card('Labor Paid',money2(laborPaid))+
           card('Labor Unpaid',money2(laborUnpaid),laborUnpaid>0?VR:V)+
         '</div>'+
       '</div>'+
-
-      /* Profit block */
-      '<div style="'+CARD+'">'+
-        sectionHead('Profit')+
+      '<div style="'+CARD+'">'+head('Profit')+
         '<div style="'+GRID3+'">'+
           card('Gross Profit',money2(grossProfit),grossProfit>=0?VG:VR)+
           card('Net Profit (Collected)',money2(netProfit),netProfit>=0?VG:VR)+
           card('Return on Investment',pct(roiPct))+
         '</div>'+
-        '<hr style="'+DIVIDER+'">'+
-        '<div style="margin-bottom:4px;"><div style="'+G+'margin-bottom:8px;">Profit Margin (Revenue-based)</div>'+
-          '<div style="display:flex;align-items:center;gap:14px;">'+
-            '<div style="flex:1;background:var(--border);border-radius:99px;height:14px;overflow:hidden;">'+
-              '<div style="width:'+barW+'%;background:'+barColor+';height:100%;border-radius:99px;transition:width .5s;"></div>'+
-            '</div>'+
-            '<div style="font-size:22px;font-weight:700;color:'+marginColor+';min-width:64px;">'+pct(marginPct)+'</div>'+
+        '<hr style="'+HR+'">'+
+        '<div style="'+G+'margin-bottom:8px;">Profit Margin</div>'+
+        '<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px;">'+
+          '<div style="flex:1;background:var(--border);border-radius:99px;height:14px;overflow:hidden;">'+
+            '<div style="width:'+barW+'%;background:'+barColor+';height:100%;border-radius:99px;"></div>'+
           '</div>'+
-          '<div class="small" style="color:var(--ink3);margin-top:6px;">'+
-            (marginPct>=40?'✅ Strong margin — well positioned.':marginPct>=20?'⚠️ Acceptable margin — watch costs.':'🔴 Low margin — review pricing or costs.')+
-          '</div>'+
+          '<div style="font-size:22px;font-weight:700;color:'+marginColor+';min-width:64px;">'+pct(marginPct)+'</div>'+
+        '</div>'+
+        '<div class="small" style="color:var(--ink3);">'+
+          (marginPct>=40?'✅ Strong margin — well positioned.':marginPct>=20?'⚠️ Acceptable — watch costs.':'🔴 Low margin — review pricing or costs.')+
         '</div>'+
       '</div>';
   }
 
-  /* Render when main Financials tab is clicked */
+  /* Wire "📊 Financial Readout" button in the form header */
   document.addEventListener('click',function(e){
-    var btn=e.target.closest('.tab[data-tab="financial"]');
-    if(btn) setTimeout(render,60);
+    if(e.target&&e.target.id==='openFinancialPanelBtn'){
+      render();
+      showPanel('financial');
+    }
+    if(e.target&&e.target.id==='financialBackToFormBtn'){
+      showPanel('form');
+    }
   });
 
-  /* Expose so switchTab patch and external callers can trigger it */
   window._renderFinancialReadout=render;
 })();
 
