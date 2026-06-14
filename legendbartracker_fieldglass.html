@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_049';
+  const BUILD='v20260612_050';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -2669,7 +2669,7 @@ renderAll();ensureEditableContractFields();
 })();
 
 (function restoreFullEventFormTabs(){
-  const fullTabsHtml=`<button type="button" class="event-form-tab active" data-event-form-section="eventDetailsSection">Event Details</button><button type="button" class="event-form-tab" data-event-form-section="quotationPaymentSection">Quotation &amp; Payment Details</button><button type="button" class="event-form-tab" data-event-form-section="staffAssignmentSection">Staff Assignment</button><button type="button" class="event-form-tab" data-event-form-section="overtimeTrackingSection">Overtime Tracking</button><button type="button" class="event-form-tab" data-event-form-section="contractQuoteBuilderSection">Contract &amp; Quote Builder</button><button type="button" class="event-form-tab" data-event-form-section="customerCommunicationSection">Customer Communication</button>`;
+  const fullTabsHtml=`<button type="button" class="event-form-tab active" data-event-form-section="eventDetailsSection">Event Details</button><button type="button" class="event-form-tab" data-event-form-section="quotationPaymentSection">Quotation &amp; Payment Details</button><button type="button" class="event-form-tab" data-event-form-section="staffAssignmentSection">Staff Assignment</button><button type="button" class="event-form-tab" data-event-form-section="overtimeTrackingSection">Overtime Tracking</button><button type="button" class="event-form-tab" data-event-form-section="contractQuoteBuilderSection">Contract &amp; Quote Builder</button><button type="button" class="event-form-tab" data-event-form-section="customerCommunicationSection">Customer Communication</button><button type="button" class="event-form-tab" data-event-form-section="financialReadoutSection">Financial Readout</button>`;
   function normalizeTabs(){
     const tabs=document.getElementById("eventFormTabs");if(tabs)tabs.innerHTML=fullTabsHtml;
     document.querySelectorAll(".event-form-tab").forEach(btn=>{if(!btn.closest("#eventFormTabs"))btn.remove();});
@@ -2678,7 +2678,7 @@ renderAll();ensureEditableContractFields();
     document.querySelectorAll("#eventFormTabs .event-form-tab").forEach(btn=>{btn.classList.toggle("active",btn.dataset.eventFormSection===activeId);});
   }
   function activateSection(sectionId){
-    const ids=["eventDetailsSection","quotationPaymentSection","staffAssignmentSection","overtimeTrackingSection","contractQuoteBuilderSection","customerCommunicationSection"];
+    const ids=["eventDetailsSection","quotationPaymentSection","staffAssignmentSection","overtimeTrackingSection","contractQuoteBuilderSection","customerCommunicationSection","financialReadoutSection"];
     ids.forEach(id=>{const section=document.getElementById(id);if(section)section.classList.toggle("active",id===sectionId);});
     document.querySelectorAll("#eventFormTabs .event-form-tab").forEach(btn=>{btn.classList.toggle("active",btn.dataset.eventFormSection===sectionId);});
   }
@@ -2690,7 +2690,7 @@ renderAll();ensureEditableContractFields();
 (function finalLegendTrackerTabFix(){
   const mainTabs=["summary","customers","bartenders","events","costs"];
   const eventPanels=["lead","form","list"];
-  const formSections=["eventDetailsSection","quotationPaymentSection","staffAssignmentSection","overtimeTrackingSection","contractQuoteBuilderSection","customerCommunicationSection"];
+  const formSections=["eventDetailsSection","quotationPaymentSection","staffAssignmentSection","overtimeTrackingSection","contractQuoteBuilderSection","customerCommunicationSection","financialReadoutSection"];
   function showMainTab(tab){if(!mainTabs.includes(tab))tab="summary";mainTabs.forEach(name=>{const panel=document.getElementById(name+"Tab");if(panel)panel.classList.toggle("hidden",name!==tab);});document.querySelectorAll(".tabs .tab[data-tab]").forEach(btn=>{btn.classList.toggle("active",btn.dataset.tab===tab);});document.body.classList.toggle("summary-active",tab==="summary");}
   function showEventPanel(panelName){if(!eventPanels.includes(panelName))panelName="form";document.querySelectorAll("#eventsTab .event-subpanel[data-event-panel]").forEach(panel=>{panel.classList.toggle("hidden",panel.dataset.eventPanel!==panelName);});document.querySelectorAll("#eventSubtabs .subtab[data-event-subtab]").forEach(btn=>{btn.classList.toggle("active",btn.dataset.eventSubtab===panelName);});}
   function showFormSection(sectionId){if(!formSections.includes(sectionId))sectionId="eventDetailsSection";formSections.forEach(id=>{const section=document.getElementById(id);if(section)section.classList.toggle("active",id===sectionId);});document.querySelectorAll("#eventFormTabs .event-form-tab[data-event-form-section]").forEach(btn=>{btn.classList.toggle("active",btn.dataset.eventFormSection===sectionId);});}
