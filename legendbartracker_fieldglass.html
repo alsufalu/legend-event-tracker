@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_052';
+  const BUILD='v20260612_053';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -881,10 +881,7 @@ tr:hover td { background:var(--surface2); }
         </div>
       </div>
       <div class="card panel event-subpanel hidden" data-event-panel="form" style="margin-bottom:14px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <h2 style="margin:0;">Event form</h2>
-          <button type="button" id="openFinancialPanelBtn" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--ink);cursor:pointer;">📊 Financial Readout</button>
-        </div>
+        <h2 style="margin-bottom:8px;">Event form</h2>
 
         <div class="event-form-tabs" id="eventFormTabs">
           <button type="button" class="event-form-tab active" data-event-form-section="eventDetailsSection">Event Details</button>
@@ -1053,25 +1050,18 @@ tr:hover td { background:var(--surface2); }
 
         <div style="height:8px;"></div>
         <div class="buttonbar" style="margin-top:12px;"></div>
-      </div>
 
-        <!-- Financial Readout Panel -->
-        <div class="card panel event-subpanel hidden" data-event-panel="financial" style="margin-bottom:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-            <div>
-              <h2 style="margin:0 0 4px;">Financial Readout</h2>
-              <div class="small" id="financialPanelSubtitle" style="color:var(--ink3);">Edit an event first to see its financial breakdown.</div>
-            </div>
-            <button type="button" id="financialBackToFormBtn" class="primary" style="font-size:12px;padding:5px 12px;">← Back to form</button>
+        <!-- Financial Readout collapsible section -->
+        <div style="margin-top:18px;border-top:2px solid var(--border);padding-top:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="financialReadoutToggle">
+            <div style="font-size:14px;font-weight:700;color:var(--fg);">📊 Financial Readout</div>
+            <span id="financialReadoutChevron" style="font-size:18px;color:var(--ink3);transition:transform .2s;">▼</span>
           </div>
-          <div id="financialReadoutContent" style="margin-top:12px;">
-            <div style="text-align:center;padding:40px 0;color:var(--ink3);">
-              <div style="font-size:36px;margin-bottom:10px;">📊</div>
-              <div style="font-size:14px;font-weight:600;margin-bottom:4px;">No event selected</div>
-              <div class="small">Open an event for editing, then click "📊 Financial Readout" to see its breakdown.</div>
-            </div>
+          <div id="financialReadoutPanel" style="display:none;margin-top:14px;">
+            <div id="financialReadoutContent"></div>
           </div>
         </div>
+      </div>
 
         </div><!-- end events-detail-pane -->
       </div><!-- end events-split-layout -->
@@ -2700,7 +2690,7 @@ renderAll();ensureEditableContractFields();
 
 (function finalLegendTrackerTabFix(){
   const mainTabs=["summary","customers","bartenders","events","costs"];
-  const eventPanels=["lead","form","list","financial"];
+  const eventPanels=["lead","form","list"];
   const formSections=["eventDetailsSection","quotationPaymentSection","staffAssignmentSection","overtimeTrackingSection","contractQuoteBuilderSection","customerCommunicationSection"];
   function showMainTab(tab){if(!mainTabs.includes(tab))tab="summary";mainTabs.forEach(name=>{const panel=document.getElementById(name+"Tab");if(panel)panel.classList.toggle("hidden",name!==tab);});document.querySelectorAll(".tabs .tab[data-tab]").forEach(btn=>{btn.classList.toggle("active",btn.dataset.tab===tab);});document.body.classList.toggle("summary-active",tab==="summary");}
   function showEventPanel(panelName){if(!eventPanels.includes(panelName))panelName="form";document.querySelectorAll("#eventsTab .event-subpanel[data-event-panel]").forEach(panel=>{panel.classList.toggle("hidden",panel.dataset.eventPanel!==panelName);});document.querySelectorAll("#eventSubtabs .subtab[data-event-subtab]").forEach(btn=>{btn.classList.toggle("active",btn.dataset.eventSubtab===panelName);});}
@@ -5465,8 +5455,10 @@ renderAll();ensureEditableContractFields();
 
 })();
 
-/* ── Financial Readout Panel (within Events) ── */
+/* ── Financial Readout (collapsible section inside event form) ── */
 (function financialReadoutTab(){
+  var _open = false;
+
   function money2(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function pct(n){ return Number(n||0).toFixed(1)+'%'; }
 
@@ -5474,118 +5466,107 @@ renderAll();ensureEditableContractFields();
     try{ return editingEventId?(state.events||[]).find(function(x){return String(x.id)===String(editingEventId);})||null:null; }catch(e){ return null; }
   }
 
-  function showPanel(name){
-    try{
-      if(typeof window.switchEventSubtab==='function') window.switchEventSubtab(name);
-      else{
-        document.querySelectorAll('.event-subpanel[data-event-panel]').forEach(function(p){ p.classList.toggle('hidden',p.dataset.eventPanel!==name); });
-      }
-    }catch(e){}
-  }
-
   function render(){
-    var el=document.getElementById('financialReadoutContent');
-    if(!el) return;
-    var ev=getEv();
+    try{
+      var el=document.getElementById('financialReadoutContent');
+      if(!el) return;
+      var ev=getEv();
 
-    var subtitle=document.getElementById('financialPanelSubtitle');
+      if(!ev){
+        el.innerHTML='<div class="small" style="color:var(--ink3);padding:8px 0 4px;">Open or save an event first to see its financial breakdown.</div>';
+        return;
+      }
 
-    if(!ev){
-      if(subtitle) subtitle.textContent='Edit an event first to see its financial breakdown.';
-      el.innerHTML='<div style="text-align:center;padding:40px 0;color:var(--ink3);"><div style="font-size:36px;margin-bottom:10px;">📊</div><div style="font-size:14px;font-weight:600;margin-bottom:4px;">No event selected</div><div class="small">Open an event for editing, then click "📊 Financial Readout" to see its breakdown.</div></div>';
-      return;
-    }
+      var revenue   = parseFloat(ev.quotationAmount)||0;
+      var deposit   = parseFloat(ev.depositAmountPaid)||0;
+      var finalPaid = parseFloat(ev.finalAmountPaid)||0;
+      var collected = deposit+finalPaid;
+      var balance   = Math.max(0, revenue-collected);
 
-    var cmap=typeof customerMap==='function'?customerMap():{};
-    var customer=cmap[ev.customerId]||{};
-    var evLabel=(ev.eventName||'Event')+(customer.name?' — '+customer.name:'')+(ev.date?' · '+ev.date:'');
-    if(subtitle) subtitle.textContent=evLabel;
+      var laborCost   = (typeof bartenderLaborCost==='function') ? bartenderLaborCost(ev) : 0;
+      var laborPaid2  = (typeof bartenderPaidAmount==='function') ? bartenderPaidAmount(ev) : 0;
+      var laborUnpaid = laborCost - laborPaid2;
+      var eventCosts  = parseFloat(ev.eventCosts)||0;
+      var adCost      = parseFloat(ev.advertisingCost)||0;
+      var totalCosts  = laborCost+eventCosts+adCost;
 
-    var revenue   = parseFloat(ev.quotationAmount)||0;
-    var deposit   = parseFloat(ev.depositAmountPaid)||0;
-    var finalPaid = parseFloat(ev.finalAmountPaid)||0;
-    var collected = deposit+finalPaid;
-    var balance   = Math.max(0, revenue-collected);
+      var grossProfit = revenue - totalCosts;
+      var netProfit   = collected - totalCosts;
+      var marginPct   = revenue>0 ? (grossProfit/revenue)*100 : 0;
+      var roiPct      = totalCosts>0 ? (grossProfit/totalCosts)*100 : 0;
 
-    var laborCost   = (typeof bartenderLaborCost==='function') ? bartenderLaborCost(ev) : 0;
-    var laborPaid   = (typeof bartenderPaidAmount==='function') ? bartenderPaidAmount(ev) : 0;
-    var laborUnpaid = laborCost - laborPaid;
-    var eventCosts  = parseFloat(ev.eventCosts)||0;
-    var adCost      = parseFloat(ev.advertisingCost)||0;
-    var totalCosts  = laborCost+eventCosts+adCost;
+      var marginColor = marginPct>=40 ? '#16a34a' : marginPct>=20 ? '#d97706' : '#dc2626';
+      var barW   = Math.min(100,Math.max(0,marginPct));
+      var barColor = marginPct>=40 ? '#16a34a' : marginPct>=20 ? '#f59e0b' : '#ef4444';
 
-    var grossProfit = revenue - totalCosts;
-    var netProfit   = collected - totalCosts;
-    var marginPct   = revenue>0 ? (grossProfit/revenue)*100 : 0;
-    var roiPct      = totalCosts>0 ? (grossProfit/totalCosts)*100 : 0;
+      var G  = 'color:var(--ink3);font-size:12px;margin-bottom:2px;';
+      var V  = 'font-size:18px;font-weight:700;color:var(--fg);';
+      var VG = 'font-size:18px;font-weight:700;color:#16a34a;';
+      var VR = 'font-size:18px;font-weight:700;color:#dc2626;';
+      var CARD = 'background:var(--bg2,#f8fafc);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:12px;';
+      var G3 = 'display:grid;grid-template-columns:repeat(3,1fr);gap:14px;';
+      var G2 = 'display:grid;grid-template-columns:repeat(2,1fr);gap:14px;';
+      var HR = 'border:none;border-top:1px solid var(--border);margin:12px 0;';
 
-    var marginColor = marginPct>=40 ? '#16a34a' : marginPct>=20 ? '#d97706' : '#dc2626';
-    var barW  = Math.min(100,Math.max(0,marginPct));
-    var barColor = marginPct>=40 ? '#16a34a' : marginPct>=20 ? '#f59e0b' : '#ef4444';
+      function card(lbl,val,vs){ return '<div><div style="'+G+'">'+lbl+'</div><div style="'+(vs||V)+'">'+val+'</div></div>'; }
+      function head(t){ return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin-bottom:12px;">'+t+'</div>'; }
 
-    var G='color:var(--ink3);font-size:12px;margin-bottom:2px;';
-    var V='font-size:20px;font-weight:700;color:var(--fg);';
-    var VG='font-size:20px;font-weight:700;color:#16a34a;';
-    var VR='font-size:20px;font-weight:700;color:#dc2626;';
-    var CARD='background:var(--bg2,#f8fafc);border:1px solid var(--border);border-radius:10px;padding:18px 22px;margin-bottom:14px;';
-    var GRID3='display:grid;grid-template-columns:repeat(3,1fr);gap:16px;';
-    var GRID2='display:grid;grid-template-columns:repeat(2,1fr);gap:16px;';
-    var HR='border:none;border-top:1px solid var(--border);margin:14px 0;';
-
-    function card(label,val,valStyle){ return '<div><div style="'+G+'">'+label+'</div><div style="'+(valStyle||V)+'">'+val+'</div></div>'; }
-    function head(title){ return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin-bottom:14px;">'+title+'</div>'; }
-
-    el.innerHTML=
-      '<div style="'+CARD+'">'+head('Revenue')+
-        '<div style="'+GRID3+'">'+
-          card('Total Quote',money2(revenue))+
-          card('Amount Collected',money2(collected),balance>0?V:VG)+
-          card('Balance Due',money2(balance),balance>0?VR:V)+
-        '</div>'+
-        (deposit||finalPaid?'<hr style="'+HR+'"><div style="'+GRID2+'">'+card('Deposit Received',money2(deposit))+card('Final Payment',money2(finalPaid))+'</div>':'')+
-      '</div>'+
-      '<div style="'+CARD+'">'+head('Costs')+
-        '<div style="'+GRID3+'">'+
-          card('Employee Labor',money2(laborCost))+
-          card('Event Costs (COGS)',money2(eventCosts))+
-          card('Advertising Cost',money2(adCost))+
-        '</div>'+
-        '<hr style="'+HR+'">'+
-        '<div style="'+GRID3+'">'+
-          card('Total Costs',money2(totalCosts),'font-size:20px;font-weight:700;color:#b45309;')+
-          card('Labor Paid',money2(laborPaid))+
-          card('Labor Unpaid',money2(laborUnpaid),laborUnpaid>0?VR:V)+
-        '</div>'+
-      '</div>'+
-      '<div style="'+CARD+'">'+head('Profit')+
-        '<div style="'+GRID3+'">'+
-          card('Gross Profit',money2(grossProfit),grossProfit>=0?VG:VR)+
-          card('Net Profit (Collected)',money2(netProfit),netProfit>=0?VG:VR)+
-          card('Return on Investment',pct(roiPct))+
-        '</div>'+
-        '<hr style="'+HR+'">'+
-        '<div style="'+G+'margin-bottom:8px;">Profit Margin</div>'+
-        '<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px;">'+
-          '<div style="flex:1;background:var(--border);border-radius:99px;height:14px;overflow:hidden;">'+
-            '<div style="width:'+barW+'%;background:'+barColor+';height:100%;border-radius:99px;"></div>'+
+      el.innerHTML=
+        '<div style="'+CARD+'">'+head('Revenue')+
+          '<div style="'+G3+'">'+
+            card('Total Quote',money2(revenue))+
+            card('Amount Collected',money2(collected),balance>0?V:VG)+
+            card('Balance Due',money2(balance),balance>0?VR:V)+
           '</div>'+
-          '<div style="font-size:22px;font-weight:700;color:'+marginColor+';min-width:64px;">'+pct(marginPct)+'</div>'+
+          (deposit||finalPaid?'<hr style="'+HR+'"><div style="'+G2+'">'+card('Deposit',money2(deposit))+card('Final Payment',money2(finalPaid))+'</div>':'')+
         '</div>'+
-        '<div class="small" style="color:var(--ink3);">'+
-          (marginPct>=40?'✅ Strong margin — well positioned.':marginPct>=20?'⚠️ Acceptable — watch costs.':'🔴 Low margin — review pricing or costs.')+
+        '<div style="'+CARD+'">'+head('Costs')+
+          '<div style="'+G3+'">'+
+            card('Employee Labor',money2(laborCost))+
+            card('Event Costs (COGS)',money2(eventCosts))+
+            card('Advertising',money2(adCost))+
+          '</div>'+
+          '<hr style="'+HR+'">'+
+          '<div style="'+G3+'">'+
+            card('Total Costs',money2(totalCosts),'font-size:18px;font-weight:700;color:#b45309;')+
+            card('Labor Paid',money2(laborPaid2))+
+            card('Labor Unpaid',money2(laborUnpaid),laborUnpaid>0?VR:V)+
+          '</div>'+
         '</div>'+
-      '</div>';
+        '<div style="'+CARD+'">'+head('Profit')+
+          '<div style="'+G3+'">'+
+            card('Gross Profit',money2(grossProfit),grossProfit>=0?VG:VR)+
+            card('Net Profit',money2(netProfit),netProfit>=0?VG:VR)+
+            card('ROI',pct(roiPct))+
+          '</div>'+
+          '<hr style="'+HR+'">'+
+          '<div style="font-size:12px;color:var(--ink3);margin-bottom:8px;">Profit Margin</div>'+
+          '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">'+
+            '<div style="flex:1;background:var(--border);border-radius:99px;height:12px;overflow:hidden;">'+
+              '<div style="width:'+barW+'%;background:'+barColor+';height:100%;border-radius:99px;"></div>'+
+            '</div>'+
+            '<div style="font-size:20px;font-weight:700;color:'+marginColor+';min-width:56px;">'+pct(marginPct)+'</div>'+
+          '</div>'+
+          '<div class="small" style="color:var(--ink3);">'+
+            (marginPct>=40?'✅ Strong margin — well positioned.':marginPct>=20?'⚠️ Acceptable — watch costs.':'🔴 Low margin — review pricing or costs.')+
+          '</div>'+
+        '</div>';
+    }catch(err){ console.error('Financial render error',err); }
   }
 
-  /* Wire "📊 Financial Readout" button in the form header */
+  function toggle(){
+    _open=!_open;
+    var panel=document.getElementById('financialReadoutPanel');
+    var chevron=document.getElementById('financialReadoutChevron');
+    if(!panel) return;
+    panel.style.display=_open?'block':'none';
+    if(chevron) chevron.style.transform=_open?'rotate(180deg)':'';
+    if(_open) render();
+  }
+
   document.addEventListener('click',function(e){
-    if(e.target&&e.target.id==='openFinancialPanelBtn'){
-      render();
-      showPanel('financial');
-    }
-    if(e.target&&e.target.id==='financialBackToFormBtn'){
-      showPanel('form');
-    }
+    var tog=e.target.closest('#financialReadoutToggle');
+    if(tog){ e.stopPropagation(); toggle(); }
   });
 
   window._renderFinancialReadout=render;
