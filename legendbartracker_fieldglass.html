@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_054';
+  const BUILD='v20260612_055';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -730,6 +730,7 @@ tr:hover td { background:var(--surface2); }
     <button class="tab" data-tab="events"><span class="tab-icon">📅</span> Events</button>
     <button class="tab" data-tab="followups"><span class="tab-icon">🔔</span> Follow Ups</button>
     <button class="tab" data-tab="costs"><span class="tab-icon">💰</span> Costs</button>
+    <button class="tab" data-tab="reports"><span class="tab-icon">📋</span> Reports</button>
   </div>
 
   <!-- Main content -->
@@ -1065,6 +1066,31 @@ tr:hover td { background:var(--surface2); }
 
         </div><!-- end events-detail-pane -->
       </div><!-- end events-split-layout -->
+    </section>
+
+    <!-- Reports Tab -->
+    <section id="reportsTab" class="hidden">
+      <div class="card panel">
+        <h2 style="margin-bottom:4px;">Reports</h2>
+        <div class="small" style="color:var(--ink3);margin-bottom:20px;">Select a report to view results.</div>
+
+        <!-- Report cards list -->
+        <div id="reportCardList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:24px;">
+          <div class="report-card" data-report="completedWithBalance" style="border:1px solid var(--border);border-radius:10px;padding:16px 18px;cursor:pointer;background:var(--surface2);transition:border-color .15s;">
+            <div style="font-size:15px;font-weight:700;margin-bottom:4px;">💰 Completed — Balance Still Due</div>
+            <div class="small" style="color:var(--ink3);">All completed events where the full amount has not been collected yet.</div>
+          </div>
+        </div>
+
+        <!-- Results area -->
+        <div id="reportResultsArea" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h3 id="reportResultsTitle" style="margin:0;"></h3>
+            <button type="button" id="reportBackBtn" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);cursor:pointer;">← All reports</button>
+          </div>
+          <div id="reportResultsContent"></div>
+        </div>
+      </div>
     </section>
 
     <!-- Follow Ups Tab (moved inside main-content) -->
@@ -1666,7 +1692,7 @@ function enrichedEvents() {
   }).sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")));
 }
 function switchTab(tab) {
-  ["summary","customers","bartenders","events","followups","costs"].forEach(name => {
+  ["summary","customers","bartenders","events","followups","costs","reports"].forEach(name => {
     document.getElementById(name + "Tab").classList.add("hidden");
   });
   document.getElementById(tab + "Tab").classList.remove("hidden");
@@ -2689,7 +2715,7 @@ renderAll();ensureEditableContractFields();
 })();
 
 (function finalLegendTrackerTabFix(){
-  const mainTabs=["summary","customers","bartenders","events","costs"];
+  const mainTabs=["summary","customers","bartenders","events","costs","reports"];
   const eventPanels=["lead","form","list"];
   const formSections=["eventDetailsSection","quotationPaymentSection","staffAssignmentSection","overtimeTrackingSection","contractQuoteBuilderSection","customerCommunicationSection"];
   function showMainTab(tab){if(!mainTabs.includes(tab))tab="summary";mainTabs.forEach(name=>{const panel=document.getElementById(name+"Tab");if(panel)panel.classList.toggle("hidden",name!==tab);});document.querySelectorAll(".tabs .tab[data-tab]").forEach(btn=>{btn.classList.toggle("active",btn.dataset.tab===tab);});document.body.classList.toggle("summary-active",tab==="summary");}
@@ -5579,6 +5605,112 @@ renderAll();ensureEditableContractFields();
   try{ editEvent=window.editEvent; }catch(ex){}
 
   window._renderFinancialReadout=render;
+})();
+
+/* ── Reports Tab ── */
+(function reportsModule(){
+
+  /* ── Report definitions ── */
+  var REPORTS={
+    completedWithBalance:{
+      title:'Completed Events — Balance Still Due',
+      run:function(){
+        try{
+          var cmap=typeof customerMap==='function'?customerMap():{};
+          var deletedIds=new Set(typeof getDeletedEventIds==='function'?getDeletedEventIds():[]);
+          var rows=(state.events||[]).filter(function(e){
+            if(!e||deletedIds.has(String(e.id))) return false;
+            var status=(e.status||'').toLowerCase();
+            var quote=parseFloat(e.quotationAmount)||0;
+            var paid=(parseFloat(e.depositAmountPaid)||0)+(parseFloat(e.finalAmountPaid)||0);
+            var bal=Math.max(0,quote-paid);
+            return status==='completed'&&bal>0;
+          });
+
+          if(!rows.length) return '<div style="padding:20px 0;color:var(--ink3);text-align:center;">No completed events with an outstanding balance. 🎉</div>';
+
+          var money=function(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+          var totalBal=0;
+          var trs=rows.map(function(e){
+            var cust=(cmap[e.customerId]||{}).name||'—';
+            var phone=(cmap[e.customerId]||{}).phone||'';
+            var quote=parseFloat(e.quotationAmount)||0;
+            var paid=(parseFloat(e.depositAmountPaid)||0)+(parseFloat(e.finalAmountPaid)||0);
+            var bal=Math.max(0,quote-paid);
+            totalBal+=bal;
+            return '<tr>'
+              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(e.eventName)+'</td>'
+              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(cust)+'</td>'
+              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(phone)+'</td>'
+              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(e.date||'')+'</td>'
+              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;">'+money(quote)+'</td>'
+              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;">'+money(paid)+'</td>'
+              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;color:#dc2626;font-weight:700;">'+money(bal)+'</td>'
+              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);"><button type="button" onclick="editEvent(\''+safe(String(e.id))+'\');if(typeof switchTab===\'function\')switchTab(\'events\');" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface2);">Open event</button></td>'
+              +'</tr>';
+          }).join('');
+
+          return '<div style="overflow-x:auto;">'
+            +'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+            +'<thead><tr style="background:var(--surface2);text-align:left;">'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Event</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Customer</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Phone</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Date</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;">Quote</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;">Collected</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;">Balance Due</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);"></th>'
+            +'</tr></thead>'
+            +'<tbody>'+trs+'</tbody>'
+            +'<tfoot><tr style="background:var(--surface2);font-weight:700;">'
+            +'<td colspan="6" style="padding:9px 10px;border-top:2px solid var(--border);">Total outstanding ('+rows.length+' event'+(rows.length!==1?'s':'')+')</td>'
+            +'<td style="padding:9px 10px;border-top:2px solid var(--border);text-align:right;color:#dc2626;">'+money(totalBal)+'</td>'
+            +'<td style="border-top:2px solid var(--border);"></td>'
+            +'</tr></tfoot>'
+            +'</table></div>';
+        }catch(err){ return '<div style="color:#dc2626;">Error running report: '+String(err)+'</div>'; }
+      }
+    }
+  };
+
+  function runReport(id){
+    var rpt=REPORTS[id];
+    if(!rpt) return;
+    var area=document.getElementById('reportResultsArea');
+    var title=document.getElementById('reportResultsTitle');
+    var content=document.getElementById('reportResultsContent');
+    var cards=document.getElementById('reportCardList');
+    if(!area||!content) return;
+    if(title) title.textContent=rpt.title;
+    content.innerHTML=rpt.run();
+    area.style.display='block';
+    if(cards) cards.style.display='none';
+  }
+
+  function showList(){
+    var area=document.getElementById('reportResultsArea');
+    var cards=document.getElementById('reportCardList');
+    if(area) area.style.display='none';
+    if(cards) cards.style.display='grid';
+  }
+
+  /* Style report cards on hover */
+  document.addEventListener('mouseover',function(e){
+    var c=e.target.closest('.report-card');
+    if(c) c.style.borderColor='var(--primary,#0891b2)';
+  });
+  document.addEventListener('mouseout',function(e){
+    var c=e.target.closest('.report-card');
+    if(c) c.style.borderColor='var(--border)';
+  });
+
+  document.addEventListener('click',function(e){
+    var card=e.target.closest('.report-card[data-report]');
+    if(card){ runReport(card.dataset.report); return; }
+    if(e.target&&e.target.id==='reportBackBtn'){ showList(); return; }
+  });
+
 })();
 
 </script>
