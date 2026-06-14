@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_053';
+  const BUILD='v20260612_054';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -5568,6 +5568,15 @@ renderAll();ensureEditableContractFields();
     var tog=e.target.closest('#financialReadoutToggle');
     if(tog){ e.stopPropagation(); toggle(); }
   });
+
+  /* Re-render whenever a different event is loaded into the form */
+  var _origEditEvent=window.editEvent;
+  window.editEvent=function(id){
+    if(_origEditEvent) _origEditEvent.apply(this,arguments);
+    if(_open) setTimeout(render,80);
+  };
+  /* Also patch the local binding so sidebar clicks go through the same path */
+  try{ editEvent=window.editEvent; }catch(ex){}
 
   window._renderFinancialReadout=render;
 })();
