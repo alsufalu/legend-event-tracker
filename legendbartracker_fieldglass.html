@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_048';
+  const BUILD='v20260612_049';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -890,6 +890,7 @@ tr:hover td { background:var(--surface2); }
           <button type="button" class="event-form-tab" data-event-form-section="overtimeTrackingSection">Overtime Tracking</button>
           <button type="button" class="event-form-tab" data-event-form-section="contractQuoteBuilderSection">Contract &amp; Quote Builder</button>
           <button type="button" class="event-form-tab" data-event-form-section="customerCommunicationSection">Customer Communication</button>
+          <button type="button" class="event-form-tab" data-event-form-section="financialReadoutSection">Financial Readout</button>
         </div>
 
         <div class="event-form-section active" id="eventDetailsSection">
@@ -1045,6 +1046,15 @@ tr:hover td { background:var(--surface2); }
               </table>
             </div>
             <div class="small" id="commEmptyMsg" style="color:var(--ink3);padding:12px 0;display:none;">No communications logged yet. Click "+ Add row" to start.</div>
+          </div>
+        </div>
+
+        <div class="event-form-section" id="financialReadoutSection">
+          <div class="section-card-lite">
+            <h3 style="margin-bottom:16px;">Financial Readout</h3>
+            <div id="financialReadoutContent">
+              <div class="small" style="color:var(--ink3);padding:8px 0;">Open or edit an event to see the financial breakdown.</div>
+            </div>
           </div>
         </div>
 
@@ -5443,6 +5453,133 @@ renderAll();ensureEditableContractFields();
   window.renderFollowUps=renderFollowUps;
 
 })();
+
+/* ── Financial Readout Tab ── */
+(function financialReadoutTab(){
+  function money2(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function pct(n){ return Number(n||0).toFixed(1)+'%'; }
+
+  function getEv(){
+    try{ return editingEventId?(state.events||[]).find(function(x){return String(x.id)===String(editingEventId);})||null:null; }catch(e){ return null; }
+  }
+
+  function render(){
+    var el=document.getElementById('financialReadoutContent');
+    if(!el) return;
+    var ev=getEv();
+    if(!ev){ el.innerHTML='<div class="small" style="color:var(--ink3);padding:8px 0;">Open or edit an event to see the financial breakdown.</div>'; return; }
+
+    var revenue   = parseFloat(ev.quotationAmount)||0;
+    var deposit   = parseFloat(ev.depositAmountPaid)||0;
+    var finalPaid = parseFloat(ev.finalAmountPaid)||0;
+    var collected = deposit+finalPaid;
+    var balance   = Math.max(0, revenue-collected);
+
+    var laborCost = (typeof bartenderLaborCost==='function') ? bartenderLaborCost(ev) : 0;
+    var laborPaid = (typeof bartenderPaidAmount==='function') ? bartenderPaidAmount(ev) : 0;
+    var laborUnpaid = laborCost - laborPaid;
+    var eventCosts= parseFloat(ev.eventCosts)||0;
+    var adCost    = parseFloat(ev.advertisingCost)||0;
+    var totalCosts= laborCost+eventCosts+adCost;
+
+    var grossProfit  = revenue - totalCosts;
+    var netProfit    = collected - totalCosts;
+    var marginPct    = revenue>0 ? (grossProfit/revenue)*100 : 0;
+    var netMarginPct = collected>0 ? (netProfit/collected)*100 : 0;
+    var roiPct       = totalCosts>0 ? (grossProfit/totalCosts)*100 : 0;
+
+    var marginColor = marginPct>=40 ? '#16a34a' : marginPct>=20 ? '#d97706' : '#dc2626';
+    var barW = Math.min(100,Math.max(0,marginPct));
+    var barColor = marginPct>=40 ? '#16a34a' : marginPct>=20 ? '#f59e0b' : '#ef4444';
+
+    var G='color:var(--ink3);font-size:12px;margin-bottom:2px;';
+    var V='font-size:18px;font-weight:700;color:var(--fg);';
+    var VG='font-size:18px;font-weight:700;color:#16a34a;';
+    var VR='font-size:18px;font-weight:700;color:#dc2626;';
+    var VN='font-size:18px;font-weight:700;color:'+marginColor+';';
+    var CARD='background:var(--bg2,#f8fafc);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:14px;';
+    var GRID3='display:grid;grid-template-columns:repeat(3,1fr);gap:14px;';
+    var GRID2='display:grid;grid-template-columns:repeat(2,1fr);gap:14px;';
+    var DIVIDER='border:none;border-top:1px solid var(--border);margin:12px 0;';
+
+    function card(label,val,valStyle){ return '<div><div style="'+G+'">'+label+'</div><div style="'+(valStyle||V)+'">'+val+'</div></div>'; }
+    function sectionHead(title){ return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin-bottom:12px;">'+title+'</div>'; }
+
+    el.innerHTML=
+      /* Revenue block */
+      '<div style="'+CARD+'">'+
+        sectionHead('Revenue')+
+        '<div style="'+GRID3+'">'+
+          card('Total Quote',money2(revenue))+
+          card('Amount Collected',money2(collected),balance>0?V:VG)+
+          card('Balance Due',balance>0?money2(balance):money2(0),balance>0?VR:V)+
+        '</div>'+
+        (deposit||finalPaid?'<hr style="'+DIVIDER+'"><div style="'+GRID2+'">'+
+          card('Deposit Received',money2(deposit))+
+          card('Final Payment',money2(finalPaid))+
+        '</div>':'') +
+      '</div>'+
+
+      /* Costs block */
+      '<div style="'+CARD+'">'+
+        sectionHead('Costs')+
+        '<div style="'+GRID3+'">'+
+          card('Employee Labor',money2(laborCost))+
+          card('Event Costs (COGS)',money2(eventCosts))+
+          card('Advertising Cost',money2(adCost))+
+        '</div>'+
+        '<hr style="'+DIVIDER+'">'+
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">'+
+          card('Total Costs',money2(totalCosts),'font-size:18px;font-weight:700;color:#b45309;')+
+          card('Labor Paid',money2(laborPaid))+
+          card('Labor Unpaid',money2(laborUnpaid),laborUnpaid>0?VR:V)+
+        '</div>'+
+      '</div>'+
+
+      /* Profit block */
+      '<div style="'+CARD+'">'+
+        sectionHead('Profit')+
+        '<div style="'+GRID3+'">'+
+          card('Gross Profit',money2(grossProfit),grossProfit>=0?VG:VR)+
+          card('Net Profit (Collected)',money2(netProfit),netProfit>=0?VG:VR)+
+          card('Return on Investment',pct(roiPct))+
+        '</div>'+
+        '<hr style="'+DIVIDER+'">'+
+        '<div style="margin-bottom:8px;"><div style="'+G+'margin-bottom:6px;">Profit Margin (Revenue-based)</div>'+
+          '<div style="display:flex;align-items:center;gap:12px;">'+
+            '<div style="flex:1;background:var(--border);border-radius:99px;height:12px;overflow:hidden;">'+
+              '<div style="width:'+barW+'%;background:'+barColor+';height:100%;border-radius:99px;transition:width .4s;"></div>'+
+            '</div>'+
+            '<div style="font-size:20px;font-weight:700;color:'+marginColor+';min-width:60px;">'+pct(marginPct)+'</div>'+
+          '</div>'+
+          '<div class="small" style="color:var(--ink3);margin-top:4px;">'+
+            (marginPct>=40?'Strong margin — well positioned.':marginPct>=20?'Acceptable margin — watch costs.':'Low margin — review pricing or costs.')+
+          '</div>'+
+        '</div>'+
+      '</div>';
+  }
+
+  /* Re-render whenever this tab becomes active */
+  document.addEventListener('click',function(e){
+    var btn=e.target.closest('[data-event-form-section="financialReadoutSection"]');
+    if(btn) setTimeout(render,50);
+  });
+
+  /* Also re-render when editEvent is called (expose hook) */
+  var _origEdit=window.editEvent;
+  window.editEvent=function(id){
+    if(_origEdit) _origEdit.apply(this,arguments);
+    /* If the financial tab is currently active, refresh */
+    setTimeout(function(){
+      var active=document.getElementById('financialReadoutSection');
+      if(active&&active.classList.contains('active')) render();
+    },100);
+  };
+
+  /* Expose for external calls */
+  window._renderFinancialReadout=render;
+})();
+
 </script>
 
 </body>
