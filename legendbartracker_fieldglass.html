@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_057';
+  const BUILD='v20260614_058';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1084,13 +1084,21 @@ tr:hover td { background:var(--surface2); }
             <div style="font-size:15px;font-weight:700;margin-bottom:4px;">👤 Unpaid Staff — Completed Events</div>
             <div class="small" style="color:var(--ink3);">Staff members who have not been paid for events that are already completed.</div>
           </div>
+          <div class="report-card" data-report="staffEvents" style="border:1px solid var(--border);border-radius:10px;padding:16px 18px;cursor:pointer;background:var(--surface2);transition:border-color .15s;">
+            <div style="font-size:15px;font-weight:700;margin-bottom:4px;">📋 Staff Events Report</div>
+            <div class="small" style="color:var(--ink3);">All staff event assignments with pay details, filterable by staff member.</div>
+          </div>
         </div>
 
         <!-- Results area -->
         <div id="reportResultsArea" style="display:none;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
             <h3 id="reportResultsTitle" style="margin:0;"></h3>
-            <button type="button" id="reportBackBtn" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);cursor:pointer;">← All reports</button>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <button type="button" id="reportDownloadCsvBtn" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);cursor:pointer;">⬇ Download CSV</button>
+              <button type="button" id="reportDownloadPdfBtn" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);cursor:pointer;">🖨 Print / PDF</button>
+              <button type="button" id="reportBackBtn" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);cursor:pointer;">← All reports</button>
+            </div>
           </div>
           <div id="reportResultsContent"></div>
         </div>
@@ -1310,7 +1318,6 @@ tr:hover td { background:var(--surface2); }
         <div class="small" id="bartenderEventsSubtitle"></div>
       </div>
       <div class="actions">
-        <button class="primary" id="exportBartenderEventsCsvBtn">Export to CSV</button>
         <button id="bartenderEventsCloseBtn">Close</button>
       </div>
     </div>
@@ -2557,7 +2564,6 @@ const chooseContractTemplateBtn=document.getElementById("chooseContractTemplateB
 const clearContractTemplateBtn=document.getElementById("clearContractTemplateBtn");if(clearContractTemplateBtn)clearContractTemplateBtn.addEventListener("click",clearStoredContractTemplate);
 const contractTemplateInput=document.getElementById("contractTemplateInput");if(contractTemplateInput)contractTemplateInput.addEventListener("change",e=>handleContractTemplateUpload(e.target.files&&e.target.files[0]));
 document.getElementById("bartenderEventsCloseBtn").addEventListener("click",closeBartenderEventsModal);
-document.getElementById("exportBartenderEventsCsvBtn").addEventListener("click",exportBartenderEventsCsv);
 document.getElementById("modalCloseBtn").addEventListener("click",closeEventModal);
 document.getElementById("modalEditBtn").addEventListener("click",()=>{closeEventModal();if(currentModalEventId)editEvent(currentModalEventId);});
 document.getElementById("markDepositBtn").addEventListener("click",()=>{
@@ -5614,20 +5620,22 @@ renderAll();ensureEditableContractFields();
 /* ── Reports Tab ── */
 (function reportsModule(){
 
+  var _currentReportId=null;
+
+  function rCsvEsc(v){ var t=v===null||v===undefined?'':String(v); return '"'+t.replace(/"/g,'""')+'"'; }
+  function rMoney(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
   /* ── Report definitions ── */
   var REPORTS={
     unpaidStaff:{
       title:'Unpaid Staff — Completed Events',
       run:function(){
         try{
-          var money=function(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); };
           var deletedIds=new Set(typeof getDeletedEventIds==='function'?getDeletedEventIds():[]);
           var bartMap={};
           (state.bartenders||[]).forEach(function(b){ bartMap[b.id]=b; });
-
           var rows=[];
           var totalOwed=0;
-
           (state.events||[]).forEach(function(ev){
             if(!ev||deletedIds.has(String(ev.id))) return;
             if((ev.status||'').toLowerCase()!=='completed') return;
@@ -5640,18 +5648,7 @@ renderAll();ensureEditableContractFields();
               totalOwed+=cost;
             });
           });
-
           if(!rows.length) return '<div style="padding:20px 0;color:var(--ink3);text-align:center;">All staff on completed events have been paid. ✅</div>';
-
-          /* Group by staff name for a cleaner view */
-          var byStaff={};
-          rows.forEach(function(r){
-            var key=r.staffName;
-            if(!byStaff[key]) byStaff[key]={name:r.staffName,phone:r.staffPhone,events:[],total:0};
-            byStaff[key].events.push(r);
-            byStaff[key].total+=r.cost;
-          });
-
           var trs=rows.map(function(r){
             return '<tr>'
               +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+safe(r.staffName)+'</td>'
@@ -5660,11 +5657,10 @@ renderAll();ensureEditableContractFields();
               +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(r.evName)+'</td>'
               +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(r.evDate)+'</td>'
               +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(r.payType==='flat'?'Flat':'Hourly @ $'+r.rate+'/hr')+'</td>'
-              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;color:#dc2626;font-weight:700;">'+money(r.cost)+'</td>'
+              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;color:#dc2626;font-weight:700;">'+rMoney(r.cost)+'</td>'
               +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);"><button type="button" onclick="editEvent(\''+safe(String(r.evId))+'\');if(typeof switchTab===\'function\')switchTab(\'events\');" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface2);">Open event</button></td>'
               +'</tr>';
           }).join('');
-
           return '<div style="overflow-x:auto;">'
             +'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
             +'<thead><tr style="background:var(--surface2);text-align:left;">'
@@ -5680,11 +5676,32 @@ renderAll();ensureEditableContractFields();
             +'<tbody>'+trs+'</tbody>'
             +'<tfoot><tr style="background:var(--surface2);font-weight:700;">'
             +'<td colspan="6" style="padding:9px 10px;border-top:2px solid var(--border);">Total unpaid ('+rows.length+' assignment'+(rows.length!==1?'s':'')+')</td>'
-            +'<td style="padding:9px 10px;border-top:2px solid var(--border);text-align:right;color:#dc2626;">'+money(totalOwed)+'</td>'
+            +'<td style="padding:9px 10px;border-top:2px solid var(--border);text-align:right;color:#dc2626;">'+rMoney(totalOwed)+'</td>'
             +'<td style="border-top:2px solid var(--border);"></td>'
             +'</tr></tfoot>'
             +'</table></div>';
         }catch(err){ return '<div style="color:#dc2626;">Error running report: '+String(err)+'</div>'; }
+      },
+      csv:function(){
+        try{
+          var deletedIds=new Set(typeof getDeletedEventIds==='function'?getDeletedEventIds():[]);
+          var bartMap={};
+          (state.bartenders||[]).forEach(function(b){ bartMap[b.id]=b; });
+          var rows=[];
+          (state.events||[]).forEach(function(ev){
+            if(!ev||deletedIds.has(String(ev.id))) return;
+            if((ev.status||'').toLowerCase()!=='completed') return;
+            (ev.bartenderAssignments||[]).forEach(function(a){
+              if(a.paid) return;
+              var cost=(typeof bartenderAssignmentCost==='function')?bartenderAssignmentCost(a,ev):0;
+              if(cost<=0) return;
+              var staff=bartMap[a.id]||{};
+              rows.push([staff.name||'Unknown',staff.phone||'',a.role||'Bartender',ev.eventName||'',ev.date||'',a.payType||'hourly',Number(a.rate||0),Number(cost.toFixed(2))]);
+            });
+          });
+          var headers=['Staff','Phone','Role','Event','Event Date','Pay Type','Rate','Amount Owed'];
+          return [headers].concat(rows).map(function(r){ return r.map(rCsvEsc).join(','); }).join('\n');
+        }catch(err){ return ''; }
       }
     },
     completedWithBalance:{
@@ -5701,10 +5718,7 @@ renderAll();ensureEditableContractFields();
             var bal=Math.max(0,quote-paid);
             return status==='completed'&&bal>0;
           });
-
           if(!rows.length) return '<div style="padding:20px 0;color:var(--ink3);text-align:center;">No completed events with an outstanding balance. 🎉</div>';
-
-          var money=function(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); };
           var totalBal=0;
           var trs=rows.map(function(e){
             var cust=(cmap[e.customerId]||{}).name||'—';
@@ -5718,13 +5732,12 @@ renderAll();ensureEditableContractFields();
               +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(cust)+'</td>'
               +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(phone)+'</td>'
               +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(e.date||'')+'</td>'
-              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;">'+money(quote)+'</td>'
-              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;">'+money(paid)+'</td>'
-              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;color:#dc2626;font-weight:700;">'+money(bal)+'</td>'
+              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;">'+rMoney(quote)+'</td>'
+              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;">'+rMoney(paid)+'</td>'
+              +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;color:#dc2626;font-weight:700;">'+rMoney(bal)+'</td>'
               +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);"><button type="button" onclick="editEvent(\''+safe(String(e.id))+'\');if(typeof switchTab===\'function\')switchTab(\'events\');" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface2);">Open event</button></td>'
               +'</tr>';
           }).join('');
-
           return '<div style="overflow-x:auto;">'
             +'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
             +'<thead><tr style="background:var(--surface2);text-align:left;">'
@@ -5740,16 +5753,128 @@ renderAll();ensureEditableContractFields();
             +'<tbody>'+trs+'</tbody>'
             +'<tfoot><tr style="background:var(--surface2);font-weight:700;">'
             +'<td colspan="6" style="padding:9px 10px;border-top:2px solid var(--border);">Total outstanding ('+rows.length+' event'+(rows.length!==1?'s':'')+')</td>'
-            +'<td style="padding:9px 10px;border-top:2px solid var(--border);text-align:right;color:#dc2626;">'+money(totalBal)+'</td>'
+            +'<td style="padding:9px 10px;border-top:2px solid var(--border);text-align:right;color:#dc2626;">'+rMoney(totalBal)+'</td>'
             +'<td style="border-top:2px solid var(--border);"></td>'
             +'</tr></tfoot>'
             +'</table></div>';
         }catch(err){ return '<div style="color:#dc2626;">Error running report: '+String(err)+'</div>'; }
+      },
+      csv:function(){
+        try{
+          var cmap=typeof customerMap==='function'?customerMap():{};
+          var deletedIds=new Set(typeof getDeletedEventIds==='function'?getDeletedEventIds():[]);
+          var rows=(state.events||[]).filter(function(e){
+            if(!e||deletedIds.has(String(e.id))) return false;
+            var status=(e.status||'').toLowerCase();
+            var quote=parseFloat(e.quotationAmount)||0;
+            var paid=(parseFloat(e.depositAmountPaid)||0)+(parseFloat(e.finalAmountPaid)||0);
+            return status==='completed'&&Math.max(0,quote-paid)>0;
+          }).map(function(e){
+            var cust=(cmap[e.customerId]||{}).name||'';
+            var phone=(cmap[e.customerId]||{}).phone||'';
+            var quote=parseFloat(e.quotationAmount)||0;
+            var paid=(parseFloat(e.depositAmountPaid)||0)+(parseFloat(e.finalAmountPaid)||0);
+            var bal=Math.max(0,quote-paid);
+            return [e.eventName||'',cust,phone,e.date||'',Number(quote.toFixed(2)),Number(paid.toFixed(2)),Number(bal.toFixed(2))];
+          });
+          var headers=['Event','Customer','Phone','Date','Quote','Collected','Balance Due'];
+          return [headers].concat(rows).map(function(r){ return r.map(rCsvEsc).join(','); }).join('\n');
+        }catch(err){ return ''; }
+      }
+    },
+    staffEvents:{
+      title:'Staff Events Report',
+      run:function(){
+        try{
+          var allBarts=state.bartenders||[];
+          var allRows=[];
+          allBarts.forEach(function(b){
+            if(typeof getBartenderEventRows==='function'){
+              getBartenderEventRows(b.id).forEach(function(r){ allRows.push(r); });
+            }
+          });
+          window._rptStaffEventsRows=allRows;
+          if(!allRows.length) return '<div style="padding:20px 0;color:var(--ink3);text-align:center;">No staff event assignments found.</div>';
+          var bartNames=allBarts.map(function(b){ return {id:b.id,name:b.name}; }).sort(function(a,b){ return String(a.name).localeCompare(String(b.name)); });
+          var filterOpts='<option value="">All staff</option>'+bartNames.map(function(b){ return '<option value="'+safe(b.id)+'">'+safe(b.name)+'</option>'; }).join('');
+          function renderRows(rows){
+            if(!rows.length) return '<tr><td colspan="9" style="padding:12px 10px;text-align:center;color:var(--ink3);">No events match the selected filter.</td></tr>';
+            return rows.map(function(r){
+              return '<tr>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+safe(r.bartenderName||'')+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.role||'')+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.date||'')+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.eventName||'')+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.customerName||'')+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.status||'')+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;font-weight:600;">$'+Number(r.payout||0).toFixed(2)+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+(r.paid?'<span style="color:#16a34a;font-weight:700;">✓ Paid</span>':'<span style="color:#dc2626;">Unpaid</span>')+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);"><button type="button" onclick="editEvent(\''+safe(String(r.eventId||''))+'\');if(typeof switchTab===\'function\')switchTab(\'events\');" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface2);">Open</button></td>'
+                +'</tr>';
+            }).join('');
+          }
+          var thead='<thead><tr style="background:var(--surface2);text-align:left;">'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Staff</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Role</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Date</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Event</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Customer</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Status</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;">Payout</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Paid?</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);"></th>'
+            +'</tr></thead>';
+          var html='<div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;">'
+            +'<label style="font-size:13px;font-weight:600;">Filter by staff:</label>'
+            +'<select id="staffEventsFilterSelect" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);">'+filterOpts+'</select>'
+            +'</div>'
+            +'<div style="overflow-x:auto;">'
+            +'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+            +thead
+            +'<tbody id="staffEventsTableBody">'+renderRows(allRows)+'</tbody>'
+            +'</table></div>';
+          setTimeout(function(){
+            var sel=document.getElementById('staffEventsFilterSelect');
+            if(!sel) return;
+            sel.addEventListener('change',function(){
+              var val=sel.value;
+              var filtered=val?allRows.filter(function(r){ return r.bartenderId===val; }):allRows;
+              window._rptStaffEventsRows=filtered;
+              var tbody=document.getElementById('staffEventsTableBody');
+              if(tbody) tbody.innerHTML=renderRows(filtered);
+            });
+          },50);
+          return html;
+        }catch(err){ return '<div style="color:#dc2626;">Error running report: '+String(err)+'</div>'; }
+      },
+      csv:function(){
+        try{
+          var rows=window._rptStaffEventsRows;
+          if(!rows||!rows.length){
+            rows=[];
+            (state.bartenders||[]).forEach(function(b){
+              if(typeof getBartenderEventRows==='function'){
+                getBartenderEventRows(b.id).forEach(function(r){ rows.push(r); });
+              }
+            });
+          }
+          var headers=['Staff','Role','Event Date','Event Name','Customer','Customer Phone','Status','Start Time','End Time','Duration','Venue Name','Address','Pay Type','Rate','Hours','Labor Pay','Travel Pay','Expense Reimbursement','Expense Notes','Total Payout','Paid Status','Date Paid','Payment Method','Description','Latest Update'];
+          var data=rows.map(function(r){ return [
+            r.bartenderName||'',r.role||'',r.date||'',r.eventName||'',r.customerName||'',r.customerPhone||'',
+            r.status||'',r.startTime||'',r.endTime||'',r.durationLabel||'',r.venueName||'',r.venueAddress||'',
+            r.payType||'',r.rate||'',r.hours===null||r.hours===undefined?'':Number((r.hours||0).toFixed(2)),
+            Number((r.laborPay||0).toFixed(2)),Number((r.travelPay||0).toFixed(2)),Number((r.expenseReimbursement||0).toFixed(2)),
+            r.expenseNotes||'',Number((r.payout||0).toFixed(2)),r.paid?'Paid out':'Not paid out',
+            r.paidDate||'',r.paymentMethod||'',r.description||'',r.latestUpdate||''
+          ]; });
+          return [headers].concat(data).map(function(r){ return r.map(rCsvEsc).join(','); }).join('\n');
+        }catch(err){ return ''; }
       }
     }
   };
 
   function runReport(id){
+    _currentReportId=id;
     var rpt=REPORTS[id];
     if(!rpt) return;
     var area=document.getElementById('reportResultsArea');
@@ -5764,6 +5889,7 @@ renderAll();ensureEditableContractFields();
   }
 
   function showList(){
+    _currentReportId=null;
     var area=document.getElementById('reportResultsArea');
     var cards=document.getElementById('reportCardList');
     if(area) area.style.display='none';
@@ -5784,6 +5910,34 @@ renderAll();ensureEditableContractFields();
     var card=e.target.closest('.report-card[data-report]');
     if(card){ runReport(card.dataset.report); return; }
     if(e.target&&e.target.id==='reportBackBtn'){ showList(); return; }
+
+    if(e.target&&e.target.id==='reportDownloadCsvBtn'){
+      if(!_currentReportId) return;
+      var rpt=REPORTS[_currentReportId];
+      if(!rpt||!rpt.csv) return;
+      var csv=rpt.csv();
+      if(!csv){ alert('No data to export.'); return; }
+      if(typeof downloadTextFile==='function'){
+        downloadTextFile('legend_report_'+_currentReportId+'_'+new Date().toISOString().slice(0,10)+'.csv',csv,'text/csv;charset=utf-8');
+      }
+      return;
+    }
+
+    if(e.target&&e.target.id==='reportDownloadPdfBtn'){
+      var rptContent=document.getElementById('reportResultsContent');
+      var titleEl=document.getElementById('reportResultsTitle');
+      if(!rptContent) return;
+      var rptTitle=titleEl?titleEl.textContent:'Report';
+      var w=window.open('','_blank','width=960,height=720');
+      if(!w){ alert('Please allow pop-ups to use Print / PDF.'); return; }
+      w.document.write('<!DOCTYPE html><html><head><title>'+rptTitle+'</title>'
+        +'<style>body{font-family:system-ui,sans-serif;padding:24px;color:#111;}table{border-collapse:collapse;width:100%;font-size:12px;}th,td{border:1px solid #ddd;padding:7px 10px;}th{background:#f3f4f6;font-weight:700;}tfoot tr{background:#f9fafb;font-weight:700;}button{display:none!important;}select{display:none!important;}h1{font-size:18px;margin-bottom:6px;}p.sub{font-size:12px;color:#666;margin-bottom:14px;}@media print{body{padding:12px;}}</style>'
+        +'</head><body><h1>'+rptTitle+'</h1><p class="sub">Legend Bartending · '+new Date().toLocaleDateString()+'</p>'+rptContent.innerHTML+'</body></html>');
+      w.document.close();
+      w.focus();
+      setTimeout(function(){ w.print(); },350);
+      return;
+    }
   });
 
 })();
