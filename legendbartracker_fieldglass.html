@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260614_058';
+  const BUILD='v20260614_059';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1060,6 +1060,25 @@ tr:hover td { background:var(--surface2); }
           </div>
           <div id="financialReadoutPanel" style="display:none;margin-top:14px;">
             <div id="financialReadoutContent"></div>
+          </div>
+        </div>
+
+        <!-- Attachments collapsible section -->
+        <div style="margin-top:18px;border-top:2px solid var(--border);padding-top:14px;" id="eventAttachmentsSection">
+          <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="attachmentsToggle">
+            <div style="font-size:14px;font-weight:700;color:var(--fg);">📎 Attachments</div>
+            <span id="attachmentsChevron" style="font-size:18px;color:var(--ink3);transition:transform .2s;">▼</span>
+          </div>
+          <div id="attachmentsPanel" style="display:none;margin-top:14px;">
+            <div id="attachmentsList" style="margin-bottom:12px;"></div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <label id="attachUploadLabel" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:var(--surface2);font-size:13px;font-weight:600;">
+                <span>⬆ Upload File</span>
+                <input type="file" id="attachFileInput" style="display:none;" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.txt,.csv,.xlsx,.xls">
+              </label>
+              <div id="attachUploadStatus" style="font-size:12px;color:var(--ink3);"></div>
+            </div>
+            <div style="font-size:11px;color:var(--ink3);margin-top:6px;">Contracts, menus, photos, and other event files. Stored securely in the cloud.</div>
           </div>
         </div>
       </div>
@@ -5154,7 +5173,9 @@ renderAll();ensureEditableContractFields();
   var SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRjeWRtbmdhZnZkaHh4anB0ZXhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0OTIxNzcsImV4cCI6MjA5NjA2ODE3N30.bqSr83R3PGNNJN0FlFTjwGJyXOFz6RMlge95HquCw3E';
   var TABLE='bar_tracker_data';
   var sbClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+  window._sbClient=sbClient;
   var currentUser=null;
+  window._sbCurrentUser=null;
   var _syncTimer=null;
 
   function showApp(){
@@ -5215,6 +5236,7 @@ renderAll();ensureEditableContractFields();
   /* Auth state change handler */
   sbClient.auth.onAuthStateChange(function(event,session){
     currentUser=session?session.user:null;
+    window._sbCurrentUser=currentUser;
     if(currentUser){
       showApp(); /* Show immediately, load data in background */
       setTimeout(function(){ try{ if(window.renderDashboard) window.renderDashboard(); }catch(ex){} }, 200);
@@ -5940,6 +5962,172 @@ renderAll();ensureEditableContractFields();
     }
   });
 
+})();
+
+/* ── Event Attachments (Supabase Storage) ── */
+(function documentsModule(){
+  var BUCKET='event-documents';
+  var _open=false;
+
+  function sb(){ return window._sbClient||null; }
+  function uid(){ return (window._sbCurrentUser&&window._sbCurrentUser.id)||null; }
+
+  /* Storage path: userId/eventId/filename */
+  function storagePath(eventId,filename){
+    return uid()+'/'+String(eventId)+'/'+filename;
+  }
+
+  /* Sanitise filename so it's storage-safe */
+  function safeName(name){
+    return name.replace(/[^a-zA-Z0-9.\-_() ]/g,'_');
+  }
+
+  /* Show/hide the panel */
+  function toggle(){
+    _open=!_open;
+    var panel=document.getElementById('attachmentsPanel');
+    var chevron=document.getElementById('attachmentsChevron');
+    if(!panel) return;
+    panel.style.display=_open?'block':'none';
+    if(chevron) chevron.style.transform=_open?'rotate(180deg)':'';
+    if(_open) renderList();
+  }
+
+  /* Set status text */
+  function setStatus(msg,ok){
+    var el=document.getElementById('attachUploadStatus');
+    if(!el) return;
+    el.textContent=msg;
+    el.style.color=ok===true?'#16a34a':ok===false?'#dc2626':'var(--ink3)';
+  }
+
+  /* Render the list of uploaded files for the current editing event */
+  async function renderList(){
+    var listEl=document.getElementById('attachmentsList');
+    if(!listEl) return;
+    if(!sb()||!uid()){
+      listEl.innerHTML='<div style="font-size:13px;color:var(--ink3);">Sign in to use attachments.</div>';
+      return;
+    }
+    if(!editingEventId){
+      listEl.innerHTML='<div style="font-size:13px;color:var(--ink3);">Save the event first before attaching files.</div>';
+      return;
+    }
+    listEl.innerHTML='<div style="font-size:13px;color:var(--ink3);">Loading…</div>';
+    try{
+      var prefix=uid()+'/'+String(editingEventId)+'/';
+      var res=await sb().storage.from(BUCKET).list(uid()+'/'+String(editingEventId),{limit:100,sortBy:{column:'created_at',order:'desc'}});
+      if(res.error) throw res.error;
+      var files=res.data||[];
+      if(!files.length){
+        listEl.innerHTML='<div style="font-size:13px;color:var(--ink3);">No attachments yet.</div>';
+        return;
+      }
+      listEl.innerHTML=files.map(function(f){
+        var path=prefix+f.name;
+        var size=f.metadata&&f.metadata.size?formatFileSize(f.metadata.size):'';
+        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;background:var(--surface2);">'
+          +'<div style="overflow:hidden;">'
+          +'<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+safe(f.name)+'</div>'
+          +(size?'<div style="font-size:11px;color:var(--ink3);">'+safe(size)+'</div>':'')
+          +'</div>'
+          +'<div style="display:flex;gap:6px;flex-shrink:0;margin-left:10px;">'
+          +'<button type="button" data-attach-download="'+safe(path)+'" data-attach-name="'+safe(f.name)+'" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface);">⬇ Download</button>'
+          +'<button type="button" data-attach-delete="'+safe(path)+'" data-attach-name="'+safe(f.name)+'" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface);color:#dc2626;">✕</button>'
+          +'</div>'
+          +'</div>';
+      }).join('');
+    }catch(err){
+      listEl.innerHTML='<div style="font-size:13px;color:#dc2626;">Error loading files: '+String(err.message||err)+'</div>';
+    }
+  }
+
+  function formatFileSize(bytes){
+    if(bytes<1024) return bytes+'B';
+    if(bytes<1024*1024) return (bytes/1024).toFixed(1)+'KB';
+    return (bytes/(1024*1024)).toFixed(1)+'MB';
+  }
+
+  /* Upload files */
+  async function uploadFiles(files){
+    if(!sb()||!uid()){ alert('Please sign in to upload files.'); return; }
+    if(!editingEventId){ alert('Please save the event before uploading attachments.'); return; }
+    setStatus('Uploading…',null);
+    var failed=[];
+    for(var i=0;i<files.length;i++){
+      var file=files[i];
+      var name=safeName(file.name);
+      var path=storagePath(editingEventId,name);
+      try{
+        var res=await sb().storage.from(BUCKET).upload(path,file,{upsert:true,contentType:file.type||'application/octet-stream'});
+        if(res.error) throw res.error;
+      }catch(err){
+        failed.push(name+': '+(err.message||err));
+      }
+    }
+    if(failed.length){ setStatus('Some files failed: '+failed.join('; '),false); }
+    else { setStatus('Upload complete ✓',true); setTimeout(function(){ setStatus('',null); },3000); }
+    renderList();
+  }
+
+  /* Download a file via signed URL */
+  async function downloadFile(path,name){
+    if(!sb()) return;
+    try{
+      var res=await sb().storage.from(BUCKET).createSignedUrl(path,60);
+      if(res.error) throw res.error;
+      var a=document.createElement('a');
+      a.href=res.data.signedUrl;
+      a.download=name;
+      a.target='_blank';
+      a.click();
+    }catch(err){ alert('Download failed: '+(err.message||err)); }
+  }
+
+  /* Delete a file */
+  async function deleteFile(path,name){
+    if(!confirm('Delete "'+name+'"? This cannot be undone.')) return;
+    if(!sb()) return;
+    try{
+      var res=await sb().storage.from(BUCKET).remove([path]);
+      if(res.error) throw res.error;
+      setStatus('Deleted.',true);
+      setTimeout(function(){ setStatus('',null); },2000);
+      renderList();
+    }catch(err){ alert('Delete failed: '+(err.message||err)); }
+  }
+
+  /* Re-render when a different event is loaded */
+  var _origEditEvent2=window.editEvent;
+  window.editEvent=function(id){
+    if(_origEditEvent2) _origEditEvent2.apply(this,arguments);
+    if(_open) setTimeout(renderList,100);
+  };
+  try{ editEvent=window.editEvent; }catch(ex){}
+
+  /* Toggle click */
+  document.addEventListener('click',function(e){
+    if(e.target.closest('#attachmentsToggle')){ toggle(); return; }
+
+    /* Download button */
+    var dlBtn=e.target.closest('[data-attach-download]');
+    if(dlBtn){ downloadFile(dlBtn.dataset.attachDownload,dlBtn.dataset.attachName); return; }
+
+    /* Delete button */
+    var delBtn=e.target.closest('[data-attach-delete]');
+    if(delBtn){ deleteFile(delBtn.dataset.attachDelete,delBtn.dataset.attachName); return; }
+  });
+
+  /* File input change */
+  document.addEventListener('change',function(e){
+    if(e.target&&e.target.id==='attachFileInput'){
+      var files=e.target.files;
+      if(files&&files.length) uploadFiles(files);
+      e.target.value='';
+    }
+  });
+
+  window._renderAttachmentsList=renderList;
 })();
 
 </script>
