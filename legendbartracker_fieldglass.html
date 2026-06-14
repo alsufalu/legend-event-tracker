@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260612_047';
+  const BUILD='v20260612_048';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -2540,10 +2540,25 @@ document.getElementById("markPaidBtn").addEventListener("click",()=>{
   renderAll();openEventDetails(currentModalEventId);
 });
 document.getElementById("generateContractBtn").addEventListener("click",()=>{
-  try{if(editingEventId||document.getElementById("eName").value.trim()){const saved=saveEventPayloadFromForm({keepFormOpen:true});if(saved)downloadWordContract(saved.id);return;}if(currentModalEventId)downloadWordContract(currentModalEventId);else alert("Open or edit an event before generating a contract.");}catch(err){console.error("Contract generation failed",err);alert("Contract generation failed: "+(err&&err.message?err.message:err));}
+  try{
+    if(editingEventId||document.getElementById("eName").value.trim()){
+      const saved=saveEventPayloadFromForm({keepFormOpen:true});
+      if(saved){downloadWordContract(saved.id);return;}
+      /* Fallback: save was suppressed — generate from already-stored editing event */
+      if(editingEventId){downloadWordContract(editingEventId);return;}
+    }
+    if(currentModalEventId)downloadWordContract(currentModalEventId);
+    else alert("Open or edit an event before generating a contract.");
+  }catch(err){console.error("Contract generation failed",err);alert("Contract generation failed: "+(err&&err.message?err.message:err));}
 });
 document.getElementById("generateContractFormBtn").addEventListener("click",()=>{
-  try{const saved=saveEventPayloadFromForm({keepFormOpen:true});if(saved)downloadWordContract(saved.id);}catch(err){console.error("Contract generation failed",err);alert("Contract generation failed: "+(err&&err.message?err.message:err));}
+  try{
+    const saved=saveEventPayloadFromForm({keepFormOpen:true});
+    if(saved){downloadWordContract(saved.id);return;}
+    /* Fallback: form save was suppressed (e.g. missing customer field) but event is already stored — generate directly */
+    if(editingEventId){downloadWordContract(editingEventId);return;}
+    alert("Please open or edit an event before generating a contract.");
+  }catch(err){console.error("Contract generation failed",err);alert("Contract generation failed: "+(err&&err.message?err.message:err));}
 });
 document.getElementById("payAllBartendersBtn").addEventListener("click",()=>{
   if(!currentModalEventId)return;const event=(state.events||[]).find(x=>x.id===currentModalEventId);if(!event)return;
