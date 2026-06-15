@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260614_061';
+  const BUILD='v20260614_062';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -5820,9 +5820,14 @@ renderAll();ensureEditableContractFields();
           var bartNames=allBarts.map(function(b){ return {id:b.id,name:b.name}; }).sort(function(a,b){ return String(a.name).localeCompare(String(b.name)); });
           var filterOpts='<option value="">All staff</option>'+bartNames.map(function(b){ return '<option value="'+safe(b.id)+'">'+safe(b.name)+'</option>'; }).join('');
           function renderRows(rows){
-            if(!rows.length) return '<tr><td colspan="12" style="padding:12px 10px;text-align:center;color:var(--ink3);">No events match the selected filter.</td></tr>';
+            if(!rows.length) return '<tr><td colspan="15" style="padding:12px 10px;text-align:center;color:var(--ink3);">No events match the selected filter.</td></tr>';
             return rows.map(function(r){
               var hrs=r.hours===null||r.hours===undefined?'—':Number(r.hours).toFixed(2);
+              var labor=Number(r.laborPay||0);
+              var travel=Number(r.travelPay||0);
+              var expense=Number(r.expenseReimbursement||0);
+              var total=Number(r.payout||0);
+              function mc(n){ return n>0?'$'+n.toFixed(2):'—'; }
               return '<tr>'
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+safe(r.bartenderName||'')+'</td>'
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.role||'')+'</td>'
@@ -5833,7 +5838,10 @@ renderAll();ensureEditableContractFields();
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.eventName||'')+'</td>'
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.customerName||'')+'</td>'
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.status||'')+'</td>'
-                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;font-weight:600;">$'+Number(r.payout||0).toFixed(2)+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;">'+mc(labor)+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;">'+mc(travel)+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;">'+mc(expense)+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;font-weight:700;border-left:2px solid var(--border);">$'+total.toFixed(2)+'</td>'
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+(r.paid?'<span style="color:#16a34a;font-weight:700;">✓ Paid</span>':'<span style="color:#dc2626;">Unpaid</span>')+'</td>'
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);"><button type="button" onclick="editEvent(\''+safe(String(r.eventId||''))+'\');if(typeof switchTab===\'function\')switchTab(\'events\');" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface2);">Open</button></td>'
                 +'</tr>';
@@ -5843,13 +5851,16 @@ renderAll();ensureEditableContractFields();
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Staff</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Role</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Date</th>'
-            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Start Time</th>'
-            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">End Time</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Start</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">End</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;">Hours</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Event</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Customer</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Status</th>'
-            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;">Payout</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;">Hourly Pay</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;">Travel</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;">Expenses</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;border-left:2px solid var(--border);">Total</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Paid?</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);"></th>'
             +'</tr></thead>';
