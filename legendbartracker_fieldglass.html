@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260614_062';
+  const BUILD='v20260614_063';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -4101,16 +4101,9 @@ renderAll();ensureEditableContractFields();
   localStorage.setItem('lbt_createdAt_migrated_v1','1');
   console.log('[LBT Migration] createdAt stamped on '+matchedEvents+' events. Unmatched CSV rows: '+unmatchedCSV.length, unmatchedCSV);
 
-  /* Download unmatched records as CSV */
+  /* Migration complete — unmatched rows logged to console only */
   if(unmatchedCSV.length>0){
-    var unmatched_full=CSV.filter(function(row){ return unmatchedCSV.indexOf(row[0])!==-1; });
-    var csvLines=['Customer Name,Phone Number,Date of Contact'];
-    unmatched_full.forEach(function(row){ csvLines.push('"'+row[0]+'","'+row[1]+'","'+row[2]+'"'); });
-    var blob=new Blob([csvLines.join('\n')],{type:'text/csv'});
-    var a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download='unmatched_thumbtack_contacts.csv';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    console.log('[LBT Migration] Unmatched contacts (no download):',unmatchedCSV);
   }
 })();
 
