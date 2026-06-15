@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Legend Bar">
+<title>Legend Bartending</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+:root {
+  --primary: #0891b2;
+  --primary-dark: #0e7490;
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --surface2: #f2f2f7;
+  --label: #000000;
+  --label2: rgba(60,60,67,0.6);
+  --label3: rgba(60,60,67,0.3);
+  --sep: rgba(60,60,67,0.29);
+  --sep-light: rgba(60,60,67,0.12);
+  --fill: rgba(120,120,128,0.2);
+  --green: #34c759;
+  --red: #ff3b30;
+  --orange: #ff9500;
+  --safe-top: env(safe-area-inset-top, 44px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tab-h: 49px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000;
+    --surface: #1c1c1e;
+    --surface2: #2c2c2e;
+    --label: #fff;
+    --label2: rgba(235,235,245,0.6);
+    --label3: rgba(235,235,245,0.3);
+    --sep: rgba(84,84,88,0.65);
+    --sep-light: rgba(84,84,88,0.36);
+    --fill: rgba(120,120,128,0.36);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--label);-webkit-font-smoothing:antialiased;}
+
+/* ── Login ── */
+#loginScreen{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 28px;}
+.login-logo{text-align:center;margin-bottom:36px;}
+.login-logo-icon{font-size:56px;display:block;margin-bottom:8px;}
+.login-logo-name{font-size:28px;font-weight:800;color:var(--primary);}
+.login-logo-sub{font-size:15px;color:var(--label2);margin-top:4px;}
+.login-form{width:100%;max-width:360px;}
+.login-group{margin-bottom:12px;}
+.login-label{font-size:13px;font-weight:600;color:var(--label2);margin-bottom:5px;display:block;}
+.login-input{width:100%;padding:14px 16px;border-radius:12px;border:1.5px solid var(--sep);background:var(--surface);font-size:17px;color:var(--label);font-family:inherit;outline:none;}
+.login-input:focus{border-color:var(--primary);}
+.login-btn{width:100%;padding:15px;border-radius:12px;background:var(--primary);color:#fff;font-size:17px;font-weight:700;border:none;cursor:pointer;margin-top:8px;}
+.login-btn:active{opacity:.85;}
+.login-err{color:var(--red);font-size:14px;text-align:center;min-height:18px;margin:8px 0;}
+
+/* ── App Shell ── */
+#app{display:none;flex-direction:column;height:100dvh;}
+#app.show{display:flex;}
+#mainContent{flex:1;overflow:hidden;position:relative;}
+
+/* ── Header ── */
+.hdr{background:var(--surface);border-bottom:.5px solid var(--sep);display:flex;align-items:flex-end;justify-content:space-between;padding:0 16px 12px;padding-top:calc(var(--safe-top) + 4px);min-height:calc(var(--safe-top) + 52px);position:relative;z-index:50;}
+.hdr-title{font-size:17px;font-weight:600;position:absolute;left:50%;transform:translateX(-50%);bottom:12px;white-space:nowrap;}
+.hdr-left,.hdr-right{z-index:1;display:flex;align-items:center;gap:4px;}
+.hdr-btn{background:none;border:none;color:var(--primary);font-size:17px;cursor:pointer;padding:4px;line-height:1;}
+.hdr-back{display:flex;align-items:center;gap:2px;color:var(--primary);font-size:17px;background:none;border:none;cursor:pointer;}
+
+/* ── Screen stack ── */
+.screen{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg);padding-bottom:16px;transform:translateX(0);transition:transform .3s cubic-bezier(.4,0,.2,1);}
+.screen.offright{transform:translateX(100%);}
+.screen.offleft{transform:translateX(-100%);}
+
+/* ── Tab Bar ── */
+#tabBar{background:rgba(248,248,248,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:.5px solid var(--sep);display:flex;padding-bottom:var(--safe-bottom);}
+@media(prefers-color-scheme:dark){#tabBar{background:rgba(28,28,30,.94);}}
+.tab-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 0;background:none;border:none;cursor:pointer;color:var(--label2);min-height:var(--tab-h);}
+.tab-item.active{color:var(--primary);}
+.tab-icon{font-size:22px;line-height:1;}
+.tab-lbl{font-size:10px;font-weight:500;}
+.tab-badge{position:absolute;top:-2px;right:-4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;}
+
+/* ── iOS List ── */
+.section{margin:20px 0 0;}
+.section-hdr{font-size:13px;font-weight:600;color:var(--label2);text-transform:uppercase;letter-spacing:.5px;padding:0 16px 6px;}
+.list{background:var(--surface);border-radius:12px;margin:0 16px;overflow:hidden;}
+.cell{display:flex;align-items:center;padding:12px 16px;border-bottom:.5px solid var(--sep-light);gap:12px;cursor:pointer;background:var(--surface);min-height:52px;}
+.cell:last-child{border-bottom:none;}
+.cell:active{background:var(--fill);}
+.cell-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.cell-body{flex:1;min-width:0;}
+.cell-title{font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cell-sub{font-size:13px;color:var(--label2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cell-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;}
+.cell-chevron{color:var(--label3);font-size:18px;flex-shrink:0;}
+
+/* ── Stats Grid ── */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 16px 0;}
+.stat-card{background:var(--surface);border-radius:14px;padding:16px;}
+.stat-val{font-size:30px;font-weight:800;color:var(--primary);}
+.stat-lbl{font-size:13px;color:var(--label2);margin-top:3px;}
+
+/* ── Status Pills ── */
+.pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:700;}
+.pill-booked,.pill-confirmed{background:#e0f2fe;color:#0369a1;}
+.pill-completed{background:#dcfce7;color:#15803d;}
+.pill-cancelled{background:#fee2e2;color:#dc2626;}
+.pill-pending{background:#fef3c7;color:#d97706;}
+.pill-in-progress{background:#f3e8ff;color:#7c3aed;}
+@media(prefers-color-scheme:dark){
+  .pill-booked,.pill-confirmed{background:#164e63;color:#67e8f9;}
+  .pill-completed{background:#14532d;color:#86efac;}
+  .pill-cancelled{background:#7f1d1d;color:#fca5a5;}
+  .pill-pending{background:#78350f;color:#fde68a;}
+}
+
+/* ── Segmented Control ── */
+.seg-wrap{margin:12px 16px;background:var(--fill);border-radius:9px;padding:2px;display:flex;}
+.seg-btn{flex:1;padding:7px 4px;font-size:13px;font-weight:500;border:none;background:none;border-radius:7px;cursor:pointer;color:var(--label);transition:all .2s;white-space:nowrap;}
+.seg-btn.active{background:var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.15);font-weight:700;color:var(--primary);}
+
+/* ── Search ── */
+.search-wrap{padding:8px 16px;}
+.search-bar{display:flex;align-items:center;background:var(--fill);border-radius:10px;padding:8px 12px;gap:8px;}
+.search-inp{flex:1;border:none;background:none;font-size:15px;color:var(--label);font-family:inherit;outline:none;}
+.search-inp::placeholder{color:var(--label2);}
+
+/* ── Sheet Modal ── */
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;opacity:0;pointer-events:none;transition:opacity .3s;}
+.sheet-bg.open{opacity:1;pointer-events:all;}
+.sheet{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-radius:22px 22px 0 0;z-index:201;max-height:94dvh;display:flex;flex-direction:column;transform:translateY(101%);transition:transform .36s cubic-bezier(.34,1.05,.64,1);}
+.sheet-bg.open .sheet{transform:translateY(0);}
+.sheet-handle{width:40px;height:4px;background:var(--sep);border-radius:2px;margin:10px auto 0;flex-shrink:0;}
+.sheet-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 12px;flex-shrink:0;border-bottom:.5px solid var(--sep-light);}
+.sheet-title{font-size:17px;font-weight:700;}
+.sheet-close{color:var(--primary);font-size:17px;background:none;border:none;cursor:pointer;padding:4px;}
+.sheet-body{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;padding-bottom:calc(var(--safe-bottom) + 24px);}
+
+/* ── Form ── */
+.form-section{margin:16px 0 0;}
+.form-section-label{font-size:13px;font-weight:600;color:var(--label2);text-transform:uppercase;letter-spacing:.4px;padding:0 16px 6px;}
+.form-group{background:var(--surface);border-radius:12px;margin:0 16px;overflow:hidden;}
+.form-row{display:flex;align-items:center;padding:12px 16px;border-bottom:.5px solid var(--sep-light);min-height:48px;gap:12px;}
+.form-row:last-child{border-bottom:none;}
+.form-lbl{font-size:15px;color:var(--label);min-width:110px;flex-shrink:0;}
+.form-inp{flex:1;border:none;background:none;font-size:15px;color:var(--label);font-family:inherit;text-align:right;outline:none;min-width:0;}
+.form-inp::placeholder{color:var(--label3);}
+.form-sel{flex:1;border:none;background:none;font-size:15px;color:var(--label);font-family:inherit;text-align:right;outline:none;-webkit-appearance:none;cursor:pointer;}
+.form-textarea{width:100%;border:none;background:none;font-size:15px;color:var(--label);font-family:inherit;outline:none;resize:none;padding:12px 16px;min-height:80px;}
+
+/* ── Buttons ── */
+.btn-wrap{padding:0 16px;margin-top:12px;display:flex;flex-direction:column;gap:10px;}
+.btn{padding:15px;border-radius:13px;font-size:17px;font-weight:700;border:none;cursor:pointer;text-align:center;width:100%;}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-secondary{background:var(--fill);color:var(--primary);}
+.btn-destructive{background:#fee2e2;color:#dc2626;}
+.btn:active{opacity:.8;}
+
+/* ── FAB ── */
+#fab{position:fixed;right:20px;bottom:calc(var(--tab-h) + var(--safe-bottom) + 16px);width:56px;height:56px;border-radius:50%;background:var(--primary);color:#fff;font-size:30px;border:none;cursor:pointer;box-shadow:0 4px 16px rgba(8,145,178,.4);display:flex;align-items:center;justify-content:center;z-index:90;transition:transform .15s;}
+#fab:active{transform:scale(.93);}
+
+/* ── Detail rows ── */
+.detail-list{background:var(--surface);border-radius:12px;margin:0 16px;overflow:hidden;}
+.detail-row{display:flex;align-items:flex-start;padding:12px 16px;border-bottom:.5px solid var(--sep-light);gap:8px;}
+.detail-row:last-child{border-bottom:none;}
+.detail-lbl{font-size:14px;color:var(--label2);min-width:110px;flex-shrink:0;padding-top:1px;}
+.detail-val{font-size:15px;color:var(--label);flex:1;text-align:right;}
+.detail-val a{color:var(--primary);text-decoration:none;}
+
+/* ── Empty state ── */
+.empty{text-align:center;padding:56px 24px;color:var(--label2);}
+.empty-icon{font-size:52px;margin-bottom:14px;}
+.empty-title{font-size:20px;font-weight:700;color:var(--label);margin-bottom:6px;}
+.empty-sub{font-size:15px;}
+
+/* ── Loading ── */
+.loading{text-align:center;padding:48px;color:var(--label2);font-size:15px;}
+
+/* ── Misc ── */
+.money-positive{color:#15803d;font-weight:700;}
+.money-negative{color:#dc2626;font-weight:700;}
+.page-title{font-size:34px;font-weight:800;padding:8px 16px 4px;}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginScreen">
+  <div class="login-logo">
+    <span class="login-logo-icon">🍸</span>
+    <div class="login-logo-name">Legend Bartending</div>
+    <div class="login-logo-sub">Business Manager</div>
+  </div>
+  <div class="login-form">
+    <div class="login-group">
+      <label class="login-label">Email</label>
+      <input class="login-input" id="lEmail" type="email" placeholder="you@example.com" autocomplete="email">
+    </div>
+    <div class="login-group">
+      <label class="login-label">Password</label>
+      <input class="login-input" id="lPass" type="password" placeholder="Password" autocomplete="current-password">
+    </div>
+    <div class="login-err" id="lErr"></div>
+    <button class="login-btn" onclick="doLogin()">Sign In</button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <!-- Header -->
+  <div class="hdr" id="hdr">
+    <div class="hdr-left" id="hdrLeft"></div>
+    <div class="hdr-title" id="hdrTitle">Legend Bartending</div>
+    <div class="hdr-right" id="hdrRight"></div>
+  </div>
+
+  <!-- Content -->
+  <div id="mainContent">
+    <div class="screen" id="screen"></div>
+  </div>
+
+  <!-- Tab bar -->
+  <div id="tabBar">
+    <button class="tab-item active" data-tab="home">
+      <span class="tab-icon">🏠</span>
+      <span class="tab-lbl">Home</span>
+    </button>
+    <button class="tab-item" data-tab="events">
+      <span class="tab-icon">📅</span>
+      <span class="tab-lbl">Events</span>
+    </button>
+    <button class="tab-item" data-tab="customers">
+      <span class="tab-icon">👥</span>
+      <span class="tab-lbl">Customers</span>
+    </button>
+    <button class="tab-item" data-tab="staff">
+      <span class="tab-icon">🍸</span>
+      <span class="tab-lbl">Staff</span>
+    </button>
+    <button class="tab-item" data-tab="reports">
+      <span class="tab-icon">📋</span>
+      <span class="tab-lbl">Reports</span>
+    </button>
+  </div>
+</div>
+
+<!-- FAB -->
+<button id="fab" onclick="onFab()">+</button>
+
+<!-- Sheet -->
+<div class="sheet-bg" id="sheetBg" onclick="handleSheetBgClick(event)">
+  <div class="sheet" id="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hdr">
+      <div class="sheet-title" id="sheetTitle"></div>
+      <button class="sheet-close" onclick="closeSheet()">Done</button>
+    </div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ─── Constants ───────────────────────────────────────────
+const SUPA_URL = 'https://dcydmngafvdhxxjptexh.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRjeWRtbmdhZnZkaHh4anB0ZXhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0OTIxNzcsImV4cCI6MjA5NjA2ODE3N30.bqSr83R3PGNNJN0FlFTjwGJyXOFz6RMlge95HquCw3E';
+const TABLE = 'bar_tracker_data';
+
+// ─── State ───────────────────────────────────────────────
+let state = { events:[], customers:[], bartenders:[], costs:[] };
+let currentUser = null;
+let currentTab = 'home';
+let eventsFilter = 'all';
+let eventsSearch = '';
+let customersSearch = '';
+let staffSearch = '';
+let _syncTimer = null;
+
+// ─── Supabase ────────────────────────────────────────────
+const sb = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+
+// ─── Auth ────────────────────────────────────────────────
+sb.auth.onAuthStateChange((event, session) => {
+  currentUser = session?.user || null;
+  if (currentUser) {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').classList.add('show');
+    document.getElementById('fab').style.display = 'flex';
+    loadFromCloud().then(() => switchTab('home'));
+  } else {
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('app').classList.remove('show');
+    document.getElementById('fab').style.display = 'none';
+  }
+});
+
+async function doLogin() {
+  const email = document.getElementById('lEmail').value.trim();
+  const pass = document.getElementById('lPass').value;
+  const err = document.getElementById('lErr');
+  err.textContent = '';
+  if (!email || !pass) { err.textContent = 'Enter email and password.'; return; }
+  err.style.color = 'var(--label2)';
+  err.textContent = 'Signing in…';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) { err.style.color = 'var(--red)'; err.textContent = error.message; }
+}
+
+async function doSignOut() {
+  await sb.auth.signOut();
+  closeSheet();
+}
+
+// ─── Cloud Sync ──────────────────────────────────────────
+async function loadFromCloud() {
+  if (!currentUser) return;
+  const { data } = await sb.from(TABLE).select('data').eq('id', currentUser.id).maybeSingle();
+  if (data?.data) state = { events:[], customers:[], bartenders:[], costs:[], ...data.data };
+}
+
+function scheduleSync() {
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(saveToCloud, 1500);
+}
+
+async function saveToCloud() {
+  if (!currentUser) return;
+  await sb.from(TABLE).upsert({ id: currentUser.id, user_id: currentUser.id, data: state, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+}
+
+async function refreshData() {
+  await loadFromCloud();
+  switchTab(currentTab, true);
+}
+
+// ─── Helpers ─────────────────────────────────────────────
+function safe(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function money(n) { return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtDate(d) { if(!d) return '—'; const p=d.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; }
+function fmtPhone(p) { const d=(p||'').replace(/\D/g,''); return d.length===10?`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`:p||'—'; }
+function generateId() { return Date.now().toString(36)+Math.random().toString(36).slice(2); }
+function customerMap() { return Object.fromEntries((state.customers||[]).map(c=>[c.id,c])); }
+function bartenderMap() { return Object.fromEntries((state.bartenders||[]).map(b=>[b.id,b])); }
+
+function pillClass(status) {
+  const s=(status||'').toLowerCase().replace(/\s+/g,'-');
+  if(['booked','confirmed'].includes(s)) return 'pill-booked';
+  if(s==='completed') return 'pill-completed';
+  if(s==='cancelled') return 'pill-cancelled';
+  if(s==='pending') return 'pill-pending';
+  if(s==='in-progress') return 'pill-in-progress';
+  return 'pill-booked';
+}
+
+function enrichedEvents() {
+  const cmap = customerMap();
+  return (state.events||[])
+    .filter(e => !e.deleted)
+    .map(e => ({
+      ...e,
+      customerName: (cmap[e.customerId]||{}).name||'Unassigned',
+      customerPhone: (cmap[e.customerId]||{}).phone||'',
+    }))
+    .sort((a,b) => String(b.date||'').localeCompare(String(a.date||'')));
+}
+
+function bartenderAssignmentCost(a, ev) {
+  const rate = Number(a.rate||0);
+  const travel = Number(a.travelPay||0);
+  const expense = Number(a.expenseReimbursement||0);
+  let labor = 0;
+  if ((a.payType||'hourly')==='flat') {
+    labor = rate;
+  } else {
+    let hrs = Number(a.actualHours||a.hours||0);
+    if (!hrs && ev.startTime && ev.endTime) {
+      const [sh,sm]=ev.startTime.split(':').map(Number);
+      const [eh,em]=ev.endTime.split(':').map(Number);
+      hrs = Math.max(0,(eh*60+em-sh*60-sm)/60);
+    }
+    const otHrs = Number(a.overtimeHours||0);
+    const otRate = Number(a.overtimeRate||rate*1.5);
+    labor = rate*Math.max(0,hrs-otHrs)+otRate*otHrs;
+  }
+  return labor+travel+expense;
+}
+
+function eventFinancials(ev) {
+  const quote = parseFloat(ev.quotationAmount)||0;
+  const deposit = parseFloat(ev.depositAmountPaid)||0;
+  const final = parseFloat(ev.finalAmountPaid)||0;
+  const collected = deposit+final;
+  const balance = Math.max(0,quote-collected);
+  const staffCost = (ev.bartenderAssignments||[]).reduce((s,a)=>s+bartenderAssignmentCost(a,ev),0);
+  const profit = collected-staffCost;
+  return { quote, deposit, final, collected, balance, staffCost, profit };
+}
+
+function todayStr() { return new Date().toISOString().slice(0,10); }
+
+// ─── Navigation ──────────────────────────────────────────
+function switchTab(tab, sameTab=false) {
+  currentTab = tab;
+  // Update tab bar
+  document.querySelectorAll('.tab-item').forEach(b => b.classList.toggle('active', b.dataset.tab===tab));
+  // Render content
+  renderTab(tab);
+  // Update header
+  updateHeader(tab);
+  // FAB visibility
+  document.getElementById('fab').style.display = ['home','reports'].includes(tab) ? 'none' : 'flex';
+}
+
+function updateHeader(tab) {
+  const titles = { home:'Legend Bartending', events:'Events', customers:'Customers', staff:'Staff', reports:'Reports' };
+  document.getElementById('hdrTitle').textContent = titles[tab]||'';
+  document.getElementById('hdrLeft').innerHTML = '';
+  document.getElementById('hdrRight').innerHTML = tab==='home'
+    ? `<button class="hdr-btn" onclick="openSettings()" title="Settings">⚙️</button>`
+    : `<button class="hdr-btn" onclick="refreshData()" title="Refresh">↻</button>`;
+}
+
+function renderTab(tab) {
+  const screen = document.getElementById('screen');
+  switch(tab) {
+    case 'home':      screen.innerHTML = getHomeHtml(); break;
+    case 'events':    screen.innerHTML = getEventsHtml(); break;
+    case 'customers': screen.innerHTML = getCustomersHtml(); break;
+    case 'staff':     screen.innerHTML = getStaffHtml(); break;
+    case 'reports':   screen.innerHTML = getReportsHtml(); break;
+  }
+  screen.scrollTop = 0;
+}
+
+// ─── Tab: Home ───────────────────────────────────────────
+function getHomeHtml() {
+  const evs = enrichedEvents();
+  const today = todayStr();
+  const upcoming = evs.filter(e => e.date >= today && !['completed','cancelled'].includes((e.status||'').toLowerCase()));
+  const completed = evs.filter(e => (e.status||'').toLowerCase()==='completed');
+  const thisMonth = new Date().toISOString().slice(0,7);
+  const monthRevenue = evs
+    .filter(e => (e.date||'').startsWith(thisMonth) && (e.status||'').toLowerCase()==='completed')
+    .reduce((s,e) => s+(parseFloat(e.depositAmountPaid)||0)+(parseFloat(e.finalAmountPaid)||0), 0);
+  const unpaidStaff = (state.events||[]).reduce((s,ev) => {
+    if ((ev.status||'').toLowerCase()!=='completed') return s;
+    return s + (ev.bartenderAssignments||[]).filter(a=>!a.paid).reduce((ss,a)=>ss+bartenderAssignmentCost(a,ev),0);
+  }, 0);
+
+  const todayEvs = evs.filter(e => e.date===today);
+  const nextEvs = upcoming.filter(e => e.date > today).slice(0,5);
+
+  let html = `<div class="page-title">👋 Hello, Alberto</div>`;
+  html += `<div style="font-size:14px;color:var(--label2);padding:0 16px 4px;">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>`;
+
+  // Stats
+  html += `<div class="stats">
+    <div class="stat-card"><div class="stat-val">${upcoming.length}</div><div class="stat-lbl">Upcoming Events</div></div>
+    <div class="stat-card"><div class="stat-val">${money(monthRevenue)}</div><div class="stat-lbl">This Month</div></div>
+    <div class="stat-card"><div class="stat-val">${completed.length}</div><div class="stat-lbl">Completed</div></div>
+    <div class="stat-card"><div class="stat-val money-negative" style="font-size:22px;">${money(unpaidStaff)}</div><div class="stat-lbl">Unpaid Staff</div></div>
+  </div>`;
+
+  // Today's events
+  if (todayEvs.length) {
+    html += `<div class="section"><div class="section-hdr">Today</div><div class="list">`;
+    todayEvs.forEach(e => { html += eventCell(e); });
+    html += `</div></div>`;
+  }
+
+  // Upcoming
+  if (nextEvs.length) {
+    html += `<div class="section"><div class="section-hdr">Upcoming</div><div class="list">`;
+    nextEvs.forEach(e => { html += eventCell(e); });
+    html += `</div></div>`;
+  }
+
+  // Recent completed
+  const recent = completed.slice(0,3);
+  if (recent.length) {
+    html += `<div class="section"><div class="section-hdr">Recent Completed</div><div class="list">`;
+    recent.forEach(e => { html += eventCell(e); });
+    html += `</div></div>`;
+  }
+
+  if (!evs.length) {
+    html += `<div class="empty"><div class="empty-icon">🍸</div><div class="empty-title">No events yet</div><div class="empty-sub">Switch to Events to add your first booking.</div></div>`;
+  }
+
+  return html;
+}
+
+function eventCell(e) {
+  return `<div class="cell" onclick="openEventDetail('${safe(e.id)}')">
+    <div class="cell-body">
+      <div class="cell-title">${safe(e.eventName||'Untitled Event')}</div>
+      <div class="cell-sub">${safe(e.customerName)} · ${fmtDate(e.date)}${e.startTime?' · '+safe(e.startTime):''}</div>
+    </div>
+    <div class="cell-right">
+      <span class="pill ${pillClass(e.status)}">${safe(e.status||'booked')}</span>
+    </div>
+    <span class="cell-chevron">›</span>
+  </div>`;
+}
+
+// ─── Tab: Events ─────────────────────────────────────────
+function getEventsHtml() {
+  let evs = enrichedEvents();
+
+  if (eventsSearch) {
+    const q = eventsSearch.toLowerCase();
+    evs = evs.filter(e => [e.eventName,e.customerName,e.venueName,e.location,e.status].join(' ').toLowerCase().includes(q));
+  }
+
+  if (eventsFilter!=='all') {
+    if (eventsFilter==='upcoming') {
+      evs = evs.filter(e => e.date >= todayStr() && !['completed','cancelled'].includes((e.status||'').toLowerCase()));
+    } else {
+      evs = evs.filter(e => (e.status||'').toLowerCase()===eventsFilter);
+    }
+  }
+
+  let html = `<div class="search-wrap"><div class="search-bar">
+    <span class="search-inp" style="color:var(--label2);font-size:16px;">🔍</span>
+    <input class="search-inp" id="evSearch" placeholder="Search events…" value="${safe(eventsSearch)}" oninput="eventsSearch=this.value;renderTab('events')">
+  </div></div>`;
+
+  html += `<div class="seg-wrap">
+    <button class="seg-btn ${eventsFilter==='all'?'active':''}" onclick="eventsFilter='all';renderTab('events')">All</button>
+    <button class="seg-btn ${eventsFilter==='upcoming'?'active':''}" onclick="eventsFilter='upcoming';renderTab('events')">Upcoming</button>
+    <button class="seg-btn ${eventsFilter==='completed'?'active':''}" onclick="eventsFilter='completed';renderTab('events')">Done</button>
+    <button class="seg-btn ${eventsFilter==='cancelled'?'active':''}" onclick="eventsFilter='cancelled';renderTab('events')">Cancelled</button>
+  </div>`;
+
+  if (!evs.length) {
+    html += `<div class="empty"><div class="empty-icon">📅</div><div class="empty-title">No events found</div><div class="empty-sub">Tap + to add a new event.</div></div>`;
+  } else {
+    html += `<div class="list" style="margin:0 16px;">`;
+    evs.forEach(e => { html += eventCell(e); });
+    html += `</div>`;
+  }
+  return html;
+}
+
+// ─── Tab: Customers ──────────────────────────────────────
+function getCustomersHtml() {
+  let custs = (state.customers||[]).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  if (customersSearch) {
+    const q = customersSearch.toLowerCase();
+    custs = custs.filter(c => [c.name,c.phone,c.email,c.notes].join(' ').toLowerCase().includes(q));
+  }
+
+  let html = `<div class="search-wrap"><div class="search-bar">
+    <span style="color:var(--label2);font-size:16px;">🔍</span>
+    <input class="search-inp" placeholder="Search customers…" value="${safe(customersSearch)}" oninput="customersSearch=this.value;renderTab('customers')">
+  </div></div>`;
+
+  if (!custs.length) {
+    html += `<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">No customers</div><div class="empty-sub">Tap + to add a customer.</div></div>`;
+  } else {
+    html += `<div class="list" style="margin:0 16px;">`;
+    custs.forEach(c => {
+      const evCount = (state.events||[]).filter(e=>e.customerId===c.id&&!e.deleted).length;
+      html += `<div class="cell" onclick="openCustomerDetail('${safe(c.id)}')">
+        <div class="cell-icon" style="background:#e0f2fe;font-size:20px;">👤</div>
+        <div class="cell-body">
+          <div class="cell-title">${safe(c.name)}</div>
+          <div class="cell-sub">${safe(fmtPhone(c.phone))}${evCount?' · '+evCount+' event'+(evCount!==1?'s':''):''}</div>
+        </div>
+        <span class="cell-chevron">›</span>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  return html;
+}
+
+// ─── Tab: Staff ──────────────────────────────────────────
+function getStaffHtml() {
+  let barts = (state.bartenders||[]).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+
+  // Calculate payout totals per bartender
+  const payouts = {};
+  (state.events||[]).filter(e=>!e.deleted).forEach(ev => {
+    (ev.bartenderAssignments||[]).forEach(a => {
+      if (!payouts[a.id]) payouts[a.id] = { paid:0, unpaid:0 };
+      const cost = bartenderAssignmentCost(a,ev);
+      if (a.paid) payouts[a.id].paid += cost;
+      else payouts[a.id].unpaid += cost;
+    });
+  });
+
+  let html = '';
+  if (!barts.length) {
+    html += `<div class="empty"><div class="empty-icon">🍸</div><div class="empty-title">No staff</div><div class="empty-sub">Tap + to add a staff member.</div></div>`;
+  } else {
+    html += `<div class="section"><div class="section-hdr">Staff Members</div><div class="list" style="margin:0 16px;">`;
+    barts.forEach(b => {
+      const p = payouts[b.id]||{paid:0,unpaid:0};
+      html += `<div class="cell" onclick="openStaffDetail('${safe(b.id)}')">
+        <div class="cell-icon" style="background:#dcfce7;font-size:20px;">🍸</div>
+        <div class="cell-body">
+          <div class="cell-title">${safe(b.name)}</div>
+          <div class="cell-sub">${safe(fmtPhone(b.phone))}</div>
+        </div>
+        <div class="cell-right" style="font-size:13px;text-align:right;">
+          ${p.unpaid>0?`<span style="color:#dc2626;font-weight:700;">${money(p.unpaid)} owed</span>`:'<span style="color:#15803d;font-weight:600;">All paid</span>'}
+          ${p.paid>0?`<span style="color:var(--label2);">${money(p.paid)} paid</span>`:''}
+        </div>
+        <span class="cell-chevron">›</span>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+  return html;
+}
+
+// ─── Tab: Reports ────────────────────────────────────────
+function getReportsHtml() {
+  const reports = [
+    { id:'balanceDue', icon:'💰', title:'Balance Still Due', sub:'Completed events with outstanding balance' },
+    { id:'unpaidStaff', icon:'👤', title:'Unpaid Staff', sub:'Staff owed money on completed events' },
+    { id:'staffEvents', icon:'📋', title:'Staff Events Report', sub:'All assignments with pay breakdown' },
+  ];
+
+  let html = `<div class="section"><div class="section-hdr">Available Reports</div><div class="list" style="margin:0 16px;">`;
+  reports.forEach(r => {
+    html += `<div class="cell" onclick="openReport('${r.id}')">
+      <div class="cell-icon" style="background:var(--fill);font-size:20px;">${r.icon}</div>
+      <div class="cell-body">
+        <div class="cell-title">${r.title}</div>
+        <div class="cell-sub">${r.sub}</div>
+      </div>
+      <span class="cell-chevron">›</span>
+    </div>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+
+// ─── Sheet Management ────────────────────────────────────
+function openSheet(title, html, closeTxt='Done') {
+  document.getElementById('sheetTitle').textContent = title;
+  document.getElementById('sheetBody').innerHTML = html;
+  document.getElementById('sheetBody').scrollTop = 0;
+  document.querySelector('.sheet-close').textContent = closeTxt;
+  document.getElementById('sheetBg').classList.add('open');
+}
+
+function closeSheet() {
+  document.getElementById('sheetBg').classList.remove('open');
+}
+
+function handleSheetBgClick(e) {
+  if (e.target === document.getElementById('sheetBg')) closeSheet();
+}
+
+// ─── Event Detail ─────────────────────────────────────────
+function openEventDetail(id) {
+  const ev = (state.events||[]).find(e=>e.id===id);
+  if (!ev) return;
+  const cmap = customerMap();
+  const bmap = bartenderMap();
+  const cust = cmap[ev.customerId]||{};
+  const fin = eventFinancials(ev);
+
+  let html = `<div class="section">
+    <div class="detail-list">
+      <div class="detail-row"><span class="detail-lbl">Date</span><span class="detail-val">${fmtDate(ev.date)}</span></div>
+      ${ev.startTime?`<div class="detail-row"><span class="detail-lbl">Time</span><span class="detail-val">${safe(ev.startTime)}${ev.endTime?' – '+safe(ev.endTime):''}</span></div>`:''}
+      <div class="detail-row"><span class="detail-lbl">Status</span><span class="detail-val"><span class="pill ${pillClass(ev.status)}">${safe(ev.status||'booked')}</span></span></div>
+      <div class="detail-row"><span class="detail-lbl">Customer</span><span class="detail-val">
+        ${safe(cust.name||'Unassigned')}
+        ${cust.phone?` · <a href="tel:${safe(cust.phone)}">${safe(fmtPhone(cust.phone))}</a>`:''}
+      </span></div>
+      ${ev.venueName||ev.location?`<div class="detail-row"><span class="detail-lbl">Venue</span><span class="detail-val">${safe(ev.venueName||ev.location||'')}</span></div>`:''}
+      ${ev.venueAddress?`<div class="detail-row"><span class="detail-lbl">Address</span><span class="detail-val">${safe(ev.venueAddress)}</span></div>`:''}
+      ${ev.guestCount?`<div class="detail-row"><span class="detail-lbl">Guests</span><span class="detail-val">${safe(ev.guestCount)}</span></div>`:''}
+    </div>
+  </div>`;
+
+  // Financials
+  html += `<div class="section"><div class="section-hdr">Financials</div>
+    <div class="detail-list">
+      <div class="detail-row"><span class="detail-lbl">Quote</span><span class="detail-val">${money(fin.quote)}</span></div>
+      <div class="detail-row"><span class="detail-lbl">Collected</span><span class="detail-val">${money(fin.collected)}</span></div>
+      <div class="detail-row"><span class="detail-lbl">Balance Due</span><span class="detail-val ${fin.balance>0?'money-negative':''}">${money(fin.balance)}</span></div>
+      <div class="detail-row"><span class="detail-lbl">Staff Cost</span><span class="detail-val">${money(fin.staffCost)}</span></div>
+      <div class="detail-row"><span class="detail-lbl">Net Profit</span><span class="detail-val ${fin.profit>=0?'money-positive':'money-negative'}">${money(fin.profit)}</span></div>
+    </div>
+  </div>`;
+
+  // Staff
+  const assignments = ev.bartenderAssignments||[];
+  if (assignments.length) {
+    html += `<div class="section"><div class="section-hdr">Staff (${assignments.length})</div><div class="list" style="margin:0 16px;">`;
+    assignments.forEach(a => {
+      const b = bmap[a.id]||{};
+      const cost = bartenderAssignmentCost(a,ev);
+      html += `<div class="cell" style="cursor:default;">
+        <div class="cell-body">
+          <div class="cell-title">${safe(b.name||'Unknown')}</div>
+          <div class="cell-sub">${safe(a.role||'Bartender')} · ${safe(a.payType||'hourly')}</div>
+        </div>
+        <div class="cell-right" style="font-size:13px;">
+          <span style="font-weight:700;">${money(cost)}</span>
+          <span style="${a.paid?'color:#15803d':'color:#dc2626'};font-weight:600;">${a.paid?'✓ Paid':'Unpaid'}</span>
+          ${!a.paid?`<button onclick="markPaid('${safe(ev.id)}','${safe(a.id)}')" style="font-size:12px;padding:4px 10px;border:1px solid #15803d;border-radius:7px;color:#15803d;background:none;cursor:pointer;margin-top:2px;">Mark paid</button>`:''}
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  if (ev.description||ev.latestUpdate) {
+    html += `<div class="section"><div class="section-hdr">Notes</div><div class="detail-list">`;
+    if (ev.description) html += `<div class="detail-row" style="flex-direction:column;align-items:flex-start;gap:4px;"><span class="detail-lbl">Description</span><span class="detail-val" style="text-align:left;">${safe(ev.description)}</span></div>`;
+    if (ev.latestUpdate) html += `<div class="detail-row" style="flex-direction:column;align-items:flex-start;gap:4px;"><span class="detail-lbl">Latest Update</span><span class="detail-val" style="text-align:left;">${safe(ev.latestUpdate)}</span></div>`;
+    html += `</div></div>`;
+  }
+
+  html += `<div class="btn-wrap">
+    <button class="btn btn-primary" onclick="openEditEvent('${safe(id)}')">✏️ Edit Event</button>
+    <button class="btn btn-destructive" onclick="confirmDeleteEvent('${safe(id)}')">🗑 Delete Event</button>
+  </div>`;
+
+  openSheet(safe(ev.eventName||'Event'), html, '✕');
+}
+
+// ─── Mark Staff Paid ──────────────────────────────────────
+function markPaid(eventId, bartId) {
+  const ev = (state.events||[]).find(e=>e.id===eventId);
+  if (!ev) return;
+  const a = (ev.bartenderAssignments||[]).find(a=>a.id===bartId);
+  if (!a) return;
+  a.paid = true;
+  a.paidDate = todayStr();
+  scheduleSync();
+  openEventDetail(eventId);
+}
+
+// ─── Delete Event ────────────────────────────────────────
+function confirmDeleteEvent(id) {
+  if (!confirm('Delete this event? This cannot be undone.')) return;
+  state.events = (state.events||[]).filter(e=>e.id!==id);
+  scheduleSync();
+  closeSheet();
+  renderTab(currentTab);
+}
+
+// ─── Add/Edit Event ──────────────────────────────────────
+function openAddEvent() { openEditEvent(null); }
+
+function openEditEvent(id) {
+  const ev = id ? (state.events||[]).find(e=>e.id===id)||{} : {};
+  const custs = (state.customers||[]).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  const barts = (state.bartenders||[]).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  const statusOpts = ['booked','confirmed','pending','in-progress','completed','cancelled'];
+
+  let html = `<div class="form-section"><div class="form-section-label">Event Info</div>
+    <div class="form-group">
+      <div class="form-row"><label class="form-lbl">Name</label><input class="form-inp" id="fe_name" placeholder="Event name" value="${safe(ev.eventName||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Date</label><input class="form-inp" id="fe_date" type="date" value="${safe(ev.date||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Start Time</label><input class="form-inp" id="fe_start" type="time" value="${safe(ev.startTime||'')}"></div>
+      <div class="form-row"><label class="form-lbl">End Time</label><input class="form-inp" id="fe_end" type="time" value="${safe(ev.endTime||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Status</label>
+        <select class="form-sel" id="fe_status">
+          ${statusOpts.map(s=>`<option value="${s}" ${ev.status===s?'selected':''}>${s.charAt(0).toUpperCase()+s.slice(1)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row"><label class="form-lbl">Guests</label><input class="form-inp" id="fe_guests" type="number" placeholder="0" value="${safe(ev.guestCount||'')}"></div>
+    </div>
+  </div>`;
+
+  html += `<div class="form-section"><div class="form-section-label">Customer</div>
+    <div class="form-group">
+      <div class="form-row"><label class="form-lbl">Customer</label>
+        <select class="form-sel" id="fe_cust">
+          <option value="">Unassigned</option>
+          ${custs.map(c=>`<option value="${safe(c.id)}" ${ev.customerId===c.id?'selected':''}>${safe(c.name)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+  </div>`;
+
+  html += `<div class="form-section"><div class="form-section-label">Venue</div>
+    <div class="form-group">
+      <div class="form-row"><label class="form-lbl">Venue Name</label><input class="form-inp" id="fe_venue" placeholder="Venue name" value="${safe(ev.venueName||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Address</label><input class="form-inp" id="fe_addr" placeholder="Address" value="${safe(ev.venueAddress||ev.location||'')}"></div>
+    </div>
+  </div>`;
+
+  html += `<div class="form-section"><div class="form-section-label">Financials</div>
+    <div class="form-group">
+      <div class="form-row"><label class="form-lbl">Quote ($)</label><input class="form-inp" id="fe_quote" type="number" step="0.01" placeholder="0.00" value="${safe(ev.quotationAmount||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Deposit Paid</label><input class="form-inp" id="fe_deposit" type="number" step="0.01" placeholder="0.00" value="${safe(ev.depositAmountPaid||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Final Paid</label><input class="form-inp" id="fe_final" type="number" step="0.01" placeholder="0.00" value="${safe(ev.finalAmountPaid||'')}"></div>
+    </div>
+  </div>`;
+
+  // Staff assignments
+  const assignments = ev.bartenderAssignments||[];
+  html += `<div class="form-section"><div class="form-section-label">Staff Assignments</div>`;
+  if (assignments.length) {
+    const bmap = bartenderMap();
+    html += `<div class="list" style="margin:0 16px;">`;
+    assignments.forEach((a,i) => {
+      const b = bmap[a.id]||{};
+      html += `<div class="cell" style="cursor:default;">
+        <div class="cell-body">
+          <div class="cell-title">${safe(b.name||'Unknown')}</div>
+          <div class="cell-sub">${safe(a.role||'Bartender')} · ${safe(a.payType||'hourly')} · $${safe(a.rate||0)}</div>
+        </div>
+        <button onclick="removeAssignment('${safe(id||'new')}','${safe(a.id)}','${i}')" style="color:#dc2626;background:none;border:none;font-size:20px;cursor:pointer;">✕</button>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  if (barts.length) {
+    html += `<div class="form-group" style="margin-top:8px;">
+      <div class="form-row"><label class="form-lbl">Add Staff</label>
+        <select class="form-sel" id="fe_addBart">
+          <option value="">Select staff…</option>
+          ${barts.filter(b=>!(assignments.find(a=>a.id===b.id))).map(b=>`<option value="${safe(b.id)}">${safe(b.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row"><label class="form-lbl">Role</label><input class="form-inp" id="fe_role" placeholder="Bartender" value="Bartender"></div>
+      <div class="form-row"><label class="form-lbl">Pay Type</label>
+        <select class="form-sel" id="fe_paytype"><option value="hourly">Hourly</option><option value="flat">Flat Rate</option></select>
+      </div>
+      <div class="form-row"><label class="form-lbl">Rate ($)</label><input class="form-inp" id="fe_rate" type="number" step="0.01" placeholder="0.00"></div>
+      <div class="form-row" style="border-bottom:none;">
+        <button onclick="addAssignmentToForm('${safe(id||'')}',${JSON.stringify(assignments).replace(/</g,'&lt;').replace(/>/g,'&gt;')})" class="btn btn-secondary" style="width:100%;padding:10px;">+ Add to Event</button>
+      </div>
+    </div>`;
+  }
+  html += `</div>`;
+
+  html += `<div class="form-section"><div class="form-section-label">Notes</div>
+    <div class="form-group">
+      <textarea class="form-textarea" id="fe_notes" placeholder="Event description…">${safe(ev.description||'')}</textarea>
+      <textarea class="form-textarea" id="fe_update" placeholder="Latest update…">${safe(ev.latestUpdate||'')}</textarea>
+    </div>
+  </div>`;
+
+  html += `<div class="btn-wrap">
+    <button class="btn btn-primary" onclick="saveEventForm('${safe(id||'')}')">💾 Save Event</button>
+    <button class="btn btn-secondary" onclick="${id?`openEventDetail('${safe(id)}')`:''};closeSheet()">Cancel</button>
+  </div>`;
+
+  openSheet(id ? '✏️ Edit Event' : '+ New Event', html, '✕');
+}
+
+function saveEventForm(id) {
+  const name = document.getElementById('fe_name').value.trim();
+  if (!name) { alert('Event name is required.'); return; }
+  const ev = id ? (state.events||[]).find(e=>e.id===id) : null;
+  const existingAssignments = ev?.bartenderAssignments||[];
+  const data = {
+    id: id||generateId(),
+    eventName: name,
+    date: document.getElementById('fe_date').value,
+    startTime: document.getElementById('fe_start').value,
+    endTime: document.getElementById('fe_end').value,
+    status: document.getElementById('fe_status').value,
+    guestCount: document.getElementById('fe_guests').value,
+    customerId: document.getElementById('fe_cust').value,
+    venueName: document.getElementById('fe_venue').value,
+    venueAddress: document.getElementById('fe_addr').value,
+    quotationAmount: document.getElementById('fe_quote').value,
+    depositAmountPaid: document.getElementById('fe_deposit').value,
+    finalAmountPaid: document.getElementById('fe_final').value,
+    description: document.getElementById('fe_notes').value,
+    latestUpdate: document.getElementById('fe_update').value,
+    bartenderAssignments: existingAssignments,
+    createdAt: ev?.createdAt||new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  if (id) {
+    const idx = (state.events||[]).findIndex(e=>e.id===id);
+    if (idx>=0) state.events[idx] = {...state.events[idx], ...data};
+    else { state.events = state.events||[]; state.events.push(data); }
+  } else {
+    state.events = state.events||[];
+    state.events.push(data);
+  }
+  scheduleSync();
+  closeSheet();
+  renderTab(currentTab);
+}
+
+function addAssignmentToForm(eventId, currentAssignments) {
+  const bartId = document.getElementById('fe_addBart').value;
+  if (!bartId) { alert('Select a staff member.'); return; }
+  const role = document.getElementById('fe_role').value||'Bartender';
+  const payType = document.getElementById('fe_paytype').value;
+  const rate = document.getElementById('fe_rate').value||0;
+  const newA = { id: bartId, role, payType, rate: Number(rate), paid: false };
+  const updated = [...(currentAssignments||[]), newA];
+  // Update the actual event in state if editing
+  if (eventId) {
+    const ev = (state.events||[]).find(e=>e.id===eventId);
+    if (ev) ev.bartenderAssignments = updated;
+  }
+  // Re-open edit form
+  openEditEvent(eventId||null);
+}
+
+function removeAssignment(eventId, bartId, idx) {
+  if (eventId && eventId!=='new') {
+    const ev = (state.events||[]).find(e=>e.id===eventId);
+    if (ev) ev.bartenderAssignments = (ev.bartenderAssignments||[]).filter((_,i)=>String(i)!==String(idx));
+  }
+  openEditEvent(eventId&&eventId!=='new'?eventId:null);
+}
+
+// ─── Customer Detail ──────────────────────────────────────
+function openCustomerDetail(id) {
+  const c = (state.customers||[]).find(c=>c.id===id);
+  if (!c) return;
+  const evs = (state.events||[]).filter(e=>e.customerId===id&&!e.deleted)
+    .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+
+  let html = `<div class="section"><div class="detail-list">
+    ${c.phone?`<div class="detail-row"><span class="detail-lbl">Phone</span><span class="detail-val"><a href="tel:${safe(c.phone)}">${safe(fmtPhone(c.phone))}</a></span></div>`:''}
+    ${c.email?`<div class="detail-row"><span class="detail-lbl">Email</span><span class="detail-val"><a href="mailto:${safe(c.email)}">${safe(c.email)}</a></span></div>`:''}
+    ${c.notes?`<div class="detail-row" style="flex-direction:column;align-items:flex-start;gap:4px;"><span class="detail-lbl">Notes</span><span class="detail-val" style="text-align:left;">${safe(c.notes)}</span></div>`:''}
+  </div></div>`;
+
+  if (evs.length) {
+    html += `<div class="section"><div class="section-hdr">Events (${evs.length})</div><div class="list" style="margin:0 16px;">`;
+    evs.forEach(e => { html += eventCell({...e, customerName:c.name}); });
+    html += `</div></div>`;
+  }
+
+  html += `<div class="btn-wrap">
+    <button class="btn btn-primary" onclick="openEditCustomer('${safe(id)}')">✏️ Edit Customer</button>
+    <button class="btn btn-destructive" onclick="confirmDeleteCustomer('${safe(id)}')">🗑 Delete</button>
+  </div>`;
+
+  openSheet(safe(c.name), html, '✕');
+}
+
+function openAddCustomer() { openEditCustomer(null); }
+
+function openEditCustomer(id) {
+  const c = id ? (state.customers||[]).find(c=>c.id===id)||{} : {};
+  const html = `
+    <div class="form-section"><div class="form-group">
+      <div class="form-row"><label class="form-lbl">Name</label><input class="form-inp" id="fc_name" placeholder="Full name" value="${safe(c.name||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Phone</label><input class="form-inp" id="fc_phone" type="tel" placeholder="Phone number" value="${safe(c.phone||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Email</label><input class="form-inp" id="fc_email" type="email" placeholder="Email" value="${safe(c.email||'')}"></div>
+    </div></div>
+    <div class="form-section"><div class="form-section-label">Notes</div>
+      <div class="form-group"><textarea class="form-textarea" id="fc_notes" placeholder="Notes about this customer…">${safe(c.notes||'')}</textarea></div>
+    </div>
+    <div class="btn-wrap">
+      <button class="btn btn-primary" onclick="saveCustomerForm('${safe(id||'')}')">💾 Save Customer</button>
+      <button class="btn btn-secondary" onclick="closeSheet()">Cancel</button>
+    </div>`;
+  openSheet(id ? '✏️ Edit Customer' : '+ New Customer', html, '✕');
+}
+
+function saveCustomerForm(id) {
+  const name = document.getElementById('fc_name').value.trim();
+  if (!name) { alert('Name is required.'); return; }
+  const data = { id:id||generateId(), name, phone:document.getElementById('fc_phone').value, email:document.getElementById('fc_email').value, notes:document.getElementById('fc_notes').value };
+  if (id) {
+    const idx = (state.customers||[]).findIndex(c=>c.id===id);
+    if (idx>=0) state.customers[idx]={...state.customers[idx],...data};
+    else { state.customers=state.customers||[]; state.customers.push(data); }
+  } else { state.customers=state.customers||[]; state.customers.push(data); }
+  scheduleSync();
+  closeSheet();
+  renderTab(currentTab);
+}
+
+function confirmDeleteCustomer(id) {
+  if (!confirm('Delete this customer?')) return;
+  state.customers=(state.customers||[]).filter(c=>c.id!==id);
+  scheduleSync(); closeSheet(); renderTab(currentTab);
+}
+
+// ─── Staff Detail ──────────────────────────────────────────
+function openStaffDetail(id) {
+  const b = (state.bartenders||[]).find(b=>b.id===id);
+  if (!b) return;
+  const evs = (state.events||[]).filter(e=>!e.deleted&&(e.bartenderAssignments||[]).find(a=>a.id===id))
+    .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  const cmap = customerMap();
+
+  let paidTotal=0, unpaidTotal=0;
+  evs.forEach(ev => {
+    const a=(ev.bartenderAssignments||[]).find(a=>a.id===id);
+    if(!a) return;
+    const cost=bartenderAssignmentCost(a,ev);
+    if(a.paid) paidTotal+=cost; else unpaidTotal+=cost;
+  });
+
+  let html = `<div class="section"><div class="detail-list">
+    ${b.phone?`<div class="detail-row"><span class="detail-lbl">Phone</span><span class="detail-val"><a href="tel:${safe(b.phone)}">${safe(fmtPhone(b.phone))}</a></span></div>`:''}
+    <div class="detail-row"><span class="detail-lbl">Paid Out</span><span class="detail-val money-positive">${money(paidTotal)}</span></div>
+    <div class="detail-row"><span class="detail-lbl">Amount Owed</span><span class="detail-val ${unpaidTotal>0?'money-negative':''}">${unpaidTotal>0?money(unpaidTotal):'All paid ✓'}</span></div>
+  </div></div>`;
+
+  if (evs.length) {
+    html += `<div class="section"><div class="section-hdr">Assigned Events</div><div class="list" style="margin:0 16px;">`;
+    evs.forEach(ev => {
+      const a=(ev.bartenderAssignments||[]).find(a=>a.id===id)||{};
+      const cost=bartenderAssignmentCost(a,ev);
+      const cust=cmap[ev.customerId]||{};
+      html += `<div class="cell" onclick="openEventDetail('${safe(ev.id)}')">
+        <div class="cell-body">
+          <div class="cell-title">${safe(ev.eventName||'Event')}</div>
+          <div class="cell-sub">${fmtDate(ev.date)} · ${safe(cust.name||'')} · <span class="${pillClass(ev.status)}" style="font-size:11px;">${safe(ev.status||'')}</span></div>
+        </div>
+        <div class="cell-right" style="font-size:13px;text-align:right;">
+          <span style="font-weight:700;">${money(cost)}</span>
+          <span style="${a.paid?'color:#15803d':'color:#dc2626'};font-size:12px;">${a.paid?'Paid':'Unpaid'}</span>
+        </div>
+        <span class="cell-chevron">›</span>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  html += `<div class="btn-wrap">
+    <button class="btn btn-primary" onclick="openEditStaff('${safe(id)}')">✏️ Edit Staff Member</button>
+    <button class="btn btn-destructive" onclick="confirmDeleteStaff('${safe(id)}')">🗑 Delete</button>
+  </div>`;
+
+  openSheet(safe(b.name), html, '✕');
+}
+
+function openAddStaff() { openEditStaff(null); }
+
+function openEditStaff(id) {
+  const b = id ? (state.bartenders||[]).find(b=>b.id===id)||{} : {};
+  const html = `
+    <div class="form-section"><div class="form-group">
+      <div class="form-row"><label class="form-lbl">Name</label><input class="form-inp" id="fb_name" placeholder="Full name" value="${safe(b.name||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Phone</label><input class="form-inp" id="fb_phone" type="tel" placeholder="Phone" value="${safe(b.phone||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Notes</label><input class="form-inp" id="fb_notes" placeholder="Notes" value="${safe(b.notes||'')}"></div>
+    </div></div>
+    <div class="btn-wrap">
+      <button class="btn btn-primary" onclick="saveStaffForm('${safe(id||'')}')">💾 Save</button>
+      <button class="btn btn-secondary" onclick="closeSheet()">Cancel</button>
+    </div>`;
+  openSheet(id ? '✏️ Edit Staff' : '+ New Staff Member', html, '✕');
+}
+
+function saveStaffForm(id) {
+  const name = document.getElementById('fb_name').value.trim();
+  if (!name) { alert('Name is required.'); return; }
+  const data = { id:id||generateId(), name, phone:document.getElementById('fb_phone').value, notes:document.getElementById('fb_notes').value };
+  if (id) {
+    const idx=(state.bartenders||[]).findIndex(b=>b.id===id);
+    if(idx>=0) state.bartenders[idx]={...state.bartenders[idx],...data};
+    else { state.bartenders=state.bartenders||[]; state.bartenders.push(data); }
+  } else { state.bartenders=state.bartenders||[]; state.bartenders.push(data); }
+  scheduleSync(); closeSheet(); renderTab(currentTab);
+}
+
+function confirmDeleteStaff(id) {
+  if (!confirm('Delete this staff member?')) return;
+  state.bartenders=(state.bartenders||[]).filter(b=>b.id!==id);
+  scheduleSync(); closeSheet(); renderTab(currentTab);
+}
+
+// ─── Reports ─────────────────────────────────────────────
+function openReport(id) {
+  let title='', html='';
+
+  if (id==='balanceDue') {
+    title = '💰 Balance Still Due';
+    const evs = enrichedEvents().filter(e => {
+      const s=(e.status||'').toLowerCase();
+      const q=parseFloat(e.quotationAmount)||0;
+      const paid=(parseFloat(e.depositAmountPaid)||0)+(parseFloat(e.finalAmountPaid)||0);
+      return s==='completed' && Math.max(0,q-paid)>0;
+    });
+    if (!evs.length) {
+      html = `<div class="empty"><div class="empty-icon">🎉</div><div class="empty-title">All collected!</div><div class="empty-sub">No completed events with outstanding balance.</div></div>`;
+    } else {
+      let total=0;
+      html = `<div class="list" style="margin:16px;">`;
+      evs.forEach(e => {
+        const q=parseFloat(e.quotationAmount)||0;
+        const paid=(parseFloat(e.depositAmountPaid)||0)+(parseFloat(e.finalAmountPaid)||0);
+        const bal=Math.max(0,q-paid);
+        total+=bal;
+        html += `<div class="cell" onclick="closeSheet();setTimeout(()=>openEventDetail('${safe(e.id)}'),200)">
+          <div class="cell-body">
+            <div class="cell-title">${safe(e.eventName||'')}</div>
+            <div class="cell-sub">${safe(e.customerName)} · ${fmtDate(e.date)}</div>
+          </div>
+          <div class="cell-right"><span class="money-negative" style="font-size:15px;font-weight:700;">${money(bal)}</span></div>
+          <span class="cell-chevron">›</span>
+        </div>`;
+      });
+      html += `</div><div style="padding:12px 20px;font-weight:700;font-size:15px;color:#dc2626;">Total outstanding: ${money(total)}</div>`;
+    }
+  }
+
+  else if (id==='unpaidStaff') {
+    title = '👤 Unpaid Staff';
+    const bmap = bartenderMap();
+    const rows = [];
+    (state.events||[]).filter(e=>!e.deleted&&(e.status||'').toLowerCase()==='completed').forEach(ev => {
+      (ev.bartenderAssignments||[]).filter(a=>!a.paid).forEach(a => {
+        const cost=bartenderAssignmentCost(a,ev);
+        if(cost>0) rows.push({ staffName:(bmap[a.id]||{}).name||'Unknown', staffPhone:(bmap[a.id]||{}).phone||'', evName:ev.eventName||'', evDate:ev.date||'', role:a.role||'Bartender', cost, evId:ev.id });
+      });
+    });
+    if (!rows.length) {
+      html = `<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">All paid!</div><div class="empty-sub">No unpaid staff on completed events.</div></div>`;
+    } else {
+      let total=0;
+      html = `<div class="list" style="margin:16px;">`;
+      rows.forEach(r => {
+        total+=r.cost;
+        html += `<div class="cell" onclick="closeSheet();setTimeout(()=>openEventDetail('${safe(r.evId)}'),200)">
+          <div class="cell-body">
+            <div class="cell-title">${safe(r.staffName)}</div>
+            <div class="cell-sub">${safe(r.evName)} · ${fmtDate(r.evDate)}</div>
+          </div>
+          <div class="cell-right"><span class="money-negative" style="font-weight:700;">${money(r.cost)}</span></div>
+          <span class="cell-chevron">›</span>
+        </div>`;
+      });
+      html += `</div><div style="padding:12px 20px;font-weight:700;font-size:15px;color:#dc2626;">Total owed: ${money(total)}</div>`;
+    }
+  }
+
+  else if (id==='staffEvents') {
+    title = '📋 Staff Events';
+    const bmap = bartenderMap();
+    const cmap = customerMap();
+    const rows = [];
+    (state.bartenders||[]).forEach(b => {
+      (state.events||[]).filter(e=>!e.deleted).forEach(ev => {
+        const a=(ev.bartenderAssignments||[]).find(a=>a.id===b.id);
+        if(!a) return;
+        rows.push({ name:b.name||'', evName:ev.eventName||'', date:ev.date||'', start:ev.startTime||'', end:ev.endTime||'', status:ev.status||'', cost:bartenderAssignmentCost(a,ev), paid:a.paid, evId:ev.id, role:a.role||'Bartender', laborPay:0, travelPay:Number(a.travelPay||0), expense:Number(a.expenseReimbursement||0) });
+      });
+    });
+    rows.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    if (!rows.length) {
+      html = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No assignments</div></div>`;
+    } else {
+      html = `<div class="list" style="margin:16px;">`;
+      rows.forEach(r => {
+        html += `<div class="cell" onclick="closeSheet();setTimeout(()=>openEventDetail('${safe(r.evId)}'),200)">
+          <div class="cell-body">
+            <div class="cell-title">${safe(r.name)}</div>
+            <div class="cell-sub">${safe(r.evName)} · ${fmtDate(r.date)}${r.start?' · '+safe(r.start):''}</div>
+          </div>
+          <div class="cell-right" style="font-size:13px;text-align:right;">
+            <span style="font-weight:700;">${money(r.cost)}</span>
+            <span style="${r.paid?'color:#15803d':'color:#dc2626'};font-size:12px;">${r.paid?'Paid':'Unpaid'}</span>
+          </div>
+          <span class="cell-chevron">›</span>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+  }
+
+  openSheet(title, html, '✕');
+}
+
+// ─── Settings ────────────────────────────────────────────
+function openSettings() {
+  const html = `
+    <div class="section"><div class="detail-list">
+      <div class="detail-row"><span class="detail-lbl">Account</span><span class="detail-val" style="font-size:14px;">${safe(currentUser?.email||'')}</span></div>
+    </div></div>
+    <div class="section"><div class="list" style="margin:0 16px;">
+      <div class="cell" onclick="refreshData();closeSheet()">
+        <div class="cell-body"><div class="cell-title">↻ Sync Now</div><div class="cell-sub">Pull latest data from cloud</div></div>
+      </div>
+      <div class="cell" onclick="openDesktopLink()">
+        <div class="cell-body"><div class="cell-title">🖥 Open Desktop Version</div><div class="cell-sub">alsufalu.github.io/legend-event-tracker</div></div>
+      </div>
+    </div></div>
+    <div class="btn-wrap" style="margin-top:32px;">
+      <button class="btn btn-destructive" onclick="doSignOut()">Sign Out</button>
+    </div>`;
+  openSheet('Settings', html, '✕');
+}
+
+function openDesktopLink() {
+  window.open('https://alsufalu.github.io/legend-event-tracker/', '_blank');
+}
+
+// ─── FAB ─────────────────────────────────────────────────
+function onFab() {
+  if (currentTab==='events') openAddEvent();
+  else if (currentTab==='customers') openAddCustomer();
+  else if (currentTab==='staff') openAddStaff();
+}
+
+// ─── Event Delegation ────────────────────────────────────
+document.addEventListener('click', e => {
+  const tabBtn = e.target.closest('.tab-item[data-tab]');
+  if (tabBtn) { switchTab(tabBtn.dataset.tab); return; }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key==='Enter' && document.activeElement?.id==='lPass') doLogin();
+});
+
+// ─── Init ────────────────────────────────────────────────
+document.getElementById('loginScreen').style.display = 'flex';
+document.getElementById('app').classList.remove('show');
+document.getElementById('fab').style.display = 'none';
+</script>
+</body>
+</html>
