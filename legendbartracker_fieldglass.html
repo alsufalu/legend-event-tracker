@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260614_060';
+  const BUILD='v20260614_061';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -5820,12 +5820,16 @@ renderAll();ensureEditableContractFields();
           var bartNames=allBarts.map(function(b){ return {id:b.id,name:b.name}; }).sort(function(a,b){ return String(a.name).localeCompare(String(b.name)); });
           var filterOpts='<option value="">All staff</option>'+bartNames.map(function(b){ return '<option value="'+safe(b.id)+'">'+safe(b.name)+'</option>'; }).join('');
           function renderRows(rows){
-            if(!rows.length) return '<tr><td colspan="9" style="padding:12px 10px;text-align:center;color:var(--ink3);">No events match the selected filter.</td></tr>';
+            if(!rows.length) return '<tr><td colspan="12" style="padding:12px 10px;text-align:center;color:var(--ink3);">No events match the selected filter.</td></tr>';
             return rows.map(function(r){
+              var hrs=r.hours===null||r.hours===undefined?'—':Number(r.hours).toFixed(2);
               return '<tr>'
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+safe(r.bartenderName||'')+'</td>'
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.role||'')+'</td>'
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.date||'')+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.startTime||'—')+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.endTime||'—')+'</td>'
+                +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;">'+safe(hrs)+'</td>'
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.eventName||'')+'</td>'
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.customerName||'')+'</td>'
                 +'<td style="padding:8px 10px;border-bottom:1px solid var(--border);">'+safe(r.status||'')+'</td>'
@@ -5839,6 +5843,9 @@ renderAll();ensureEditableContractFields();
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Staff</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Role</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Date</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Start Time</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">End Time</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;">Hours</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Event</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Customer</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Status</th>'
