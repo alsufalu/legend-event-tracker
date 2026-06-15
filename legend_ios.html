@@ -279,7 +279,6 @@ let currentTab = 'home';
 let eventsFilter = 'all';
 let eventsSearch = '';
 let eventsSortAsc = true;
-let eventsCategoryFilter = [];
 let customersSearch = '';
 let staffSearch = '';
 let _syncTimer = null;
@@ -374,13 +373,15 @@ function enrichedEvents(ascending=false) {
       : String(b.date||'').localeCompare(String(a.date||'')));
 }
 
-function allCategories() {
-  const cats = new Set();
-  (state.events||[]).filter(e=>!e.deleted).forEach(e => {
-    const c = e.category||e.eventType||'';
-    if (c) cats.add(c);
-  });
-  return [...cats].sort();
+// Status order for display
+const STATUS_ORDER = ['booked','deciding','confirmed','pending','in-progress','completed','cancelled','lost'];
+
+function eventStatuses() {
+  const found = new Set((state.events||[]).filter(e=>!e.deleted).map(e=>(e.status||'').toLowerCase()).filter(Boolean));
+  // Show in preferred order, then any others alphabetically
+  const ordered = STATUS_ORDER.filter(s=>found.has(s));
+  found.forEach(s=>{ if(!STATUS_ORDER.includes(s)) ordered.push(s); });
+  return ordered;
 }
 
 function bartenderAssignmentCost(a, ev) {
@@ -456,7 +457,7 @@ function getHomeHtml() {
   const evs = enrichedEvents(false); // descending for "recent completed"
   const evsAsc = enrichedEvents(true); // ascending for upcoming (soonest first)
   const today = todayStr();
-  const upcoming = evsAsc.filter(e => e.date >= today && !['completed','cancelled'].includes((e.status||'').toLowerCase()));
+  const upcoming = evsAsc.filter(e => (e.status||'').toLowerCase() === 'booked');
   const completed = evs.filter(e => (e.status||'').toLowerCase()==='completed');
   const thisMonth = new Date().toISOString().slice(0,7);
   const monthRevenue = evs
@@ -467,7 +468,7 @@ function getHomeHtml() {
     return s + (ev.bartenderAssignments||[]).filter(a=>!a.paid).reduce((ss,a)=>ss+bartenderAssignmentCost(a,ev),0);
   }, 0);
 
-  const todayEvs = evsAsc.filter(e => e.date===today);
+  const todayEvs = evsAsc.filter(e => e.date===today && (e.status||'').toLowerCase()==='booked');
   const nextEvs = upcoming.filter(e => e.date > today).slice(0,5);
 
   let html = `<div class="page-title">👋 Hello, Alberto</div>`;
@@ -524,39 +525,34 @@ function eventCell(e) {
 }
 
 // ─── Tab: Events ─────────────────────────────────────────
-function getEventsHtml() {
-  const cats = allCategories();
+function statusChipsHtml() {
+  const statuses = eventStatuses();
+  let html = `<div id="statusChips" style="display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:8px;padding:8px 16px 4px;scrollbar-width:none;">`;
+  const chip = (val, label) => {
+    const active = eventsFilter === val;
+    return `<button onclick="eventsFilter='${val}';updateEventsList()" style="flex-shrink:0;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:${active?'700':'500'};border:1.5px solid ${active?'var(--primary)':'var(--sep)'};background:${active?'var(--primary)':'var(--surface)'};color:${active?'#fff':'var(--label)'};cursor:pointer;white-space:nowrap;">${label}</button>`;
+  };
+  html += chip('all','All');
+  statuses.forEach(s => { html += chip(s, s.charAt(0).toUpperCase()+s.slice(1)); });
+  html += `</div>`;
+  return html;
+}
 
+function getEventsHtml() {
   let html = `<div class="search-wrap"><div class="search-bar">
     <span style="color:var(--label2);font-size:16px;">🔍</span>
     <input class="search-inp" id="evSearch" placeholder="Search events…" value="${safe(eventsSearch)}"
       oninput="eventsSearch=this.value;updateEventsList()">
   </div></div>`;
 
-  html += `<div style="display:flex;align-items:center;gap:6px;padding:0 16px 4px;">
-    <div class="seg-wrap" style="flex:1;margin:8px 0 0;">
-      <button class="seg-btn ${eventsFilter==='all'?'active':''}" onclick="eventsFilter='all';updateEventsList()">All</button>
-      <button class="seg-btn ${eventsFilter==='upcoming'?'active':''}" onclick="eventsFilter='upcoming';updateEventsList()">Upcoming</button>
-      <button class="seg-btn ${eventsFilter==='completed'?'active':''}" onclick="eventsFilter='completed';updateEventsList()">Done</button>
-      <button class="seg-btn ${eventsFilter==='cancelled'?'active':''}" onclick="eventsFilter='cancelled';updateEventsList()">Cancelled</button>
-    </div>
-    <button onclick="eventsSortAsc=!eventsSortAsc;updateEventsList()" title="Toggle sort order"
-      style="flex-shrink:0;margin-top:8px;background:var(--fill);border:none;border-radius:8px;padding:7px 10px;font-size:14px;cursor:pointer;color:var(--label);">
-      ${eventsSortAsc?'↑ Date':'↓ Date'}
+  html += statusChipsHtml();
+
+  html += `<div style="display:flex;justify-content:flex-end;padding:0 16px 4px;">
+    <button onclick="eventsSortAsc=!eventsSortAsc;updateEventsList()" id="sortToggleBtn"
+      style="background:var(--fill);border:none;border-radius:8px;padding:5px 10px;font-size:13px;cursor:pointer;color:var(--label);">
+      ${eventsSortAsc?'↑ Oldest first':'↓ Newest first'}
     </button>
   </div>`;
-
-  if (cats.length) {
-    html += `<div style="padding:4px 16px 0;display:flex;flex-wrap:wrap;gap:6px;" id="catFilterWrap">`;
-    cats.forEach(c => {
-      const active = eventsCategoryFilter.includes(c);
-      html += `<button onclick="toggleCategoryFilter('${safe(c)}')" style="padding:5px 12px;border-radius:20px;font-size:13px;font-weight:600;border:1.5px solid ${active?'var(--primary)':'var(--sep)'};background:${active?'var(--primary)':'var(--surface)'};color:${active?'#fff':'var(--label)'};cursor:pointer;">${safe(c)}</button>`;
-    });
-    if (eventsCategoryFilter.length) {
-      html += `<button onclick="eventsCategoryFilter=[];updateEventsList()" style="padding:5px 12px;border-radius:20px;font-size:13px;border:1.5px solid var(--sep);background:none;color:var(--label2);cursor:pointer;">✕ Clear</button>`;
-    }
-    html += `</div>`;
-  }
 
   html += `<div id="eventsListContainer">${getEventsListHtml()}</div>`;
   return html;
@@ -570,50 +566,24 @@ function getEventsListHtml() {
     evs = evs.filter(e => [e.eventName,e.customerName,e.venueName,e.location,e.status,e.category,e.eventType].join(' ').toLowerCase().includes(q));
   }
 
-  if (eventsFilter!=='all') {
-    if (eventsFilter==='upcoming') {
-      evs = evs.filter(e => e.date >= todayStr() && !['completed','cancelled'].includes((e.status||'').toLowerCase()));
-    } else {
-      evs = evs.filter(e => (e.status||'').toLowerCase()===eventsFilter);
-    }
-  }
-
-  if (eventsCategoryFilter.length) {
-    evs = evs.filter(e => eventsCategoryFilter.includes(e.category||e.eventType||''));
+  if (eventsFilter !== 'all') {
+    evs = evs.filter(e => (e.status||'').toLowerCase() === eventsFilter);
   }
 
   if (!evs.length) return `<div class="empty"><div class="empty-icon">📅</div><div class="empty-title">No events found</div><div class="empty-sub">Tap + to add a new event.</div></div>`;
-  return `<div class="list" style="margin:8px 16px 0;">${evs.map(e=>eventCell(e)).join('')}</div>`;
+  return `<div class="list" style="margin:4px 16px 0;">${evs.map(e=>eventCell(e)).join('')}</div>`;
 }
 
 function updateEventsList() {
   const container = document.getElementById('eventsListContainer');
-  if (container) {
-    container.innerHTML = getEventsListHtml();
-    // Update sort button label
-    const sortBtn = document.querySelector('[title="Toggle sort order"]');
-    if (sortBtn) sortBtn.textContent = eventsSortAsc ? '↑ Date' : '↓ Date';
-    // Update category pills
-    const cats = allCategories();
-    const wrap = document.getElementById('catFilterWrap');
-    if (wrap && cats.length) {
-      wrap.innerHTML = cats.map(c => {
-        const active = eventsCategoryFilter.includes(c);
-        return `<button onclick="toggleCategoryFilter('${safe(c)}')" style="padding:5px 12px;border-radius:20px;font-size:13px;font-weight:600;border:1.5px solid ${active?'var(--primary)':'var(--sep)'};background:${active?'var(--primary)':'var(--surface)'};color:${active?'#fff':'var(--label)'};cursor:pointer;">${safe(c)}</button>`;
-      }).join('') + (eventsCategoryFilter.length
-        ? `<button onclick="eventsCategoryFilter=[];updateEventsList()" style="padding:5px 12px;border-radius:20px;font-size:13px;border:1.5px solid var(--sep);background:none;color:var(--label2);cursor:pointer;">✕ Clear</button>`
-        : '');
-    }
-  } else {
-    renderTab('events');
-  }
-}
-
-function toggleCategoryFilter(cat) {
-  const idx = eventsCategoryFilter.indexOf(cat);
-  if (idx>=0) eventsCategoryFilter.splice(idx,1);
-  else eventsCategoryFilter.push(cat);
-  updateEventsList();
+  if (!container) { renderTab('events'); return; }
+  container.innerHTML = getEventsListHtml();
+  // Refresh chips to update active state
+  const chipsEl = document.getElementById('statusChips');
+  if (chipsEl) chipsEl.outerHTML = statusChipsHtml();
+  // Refresh sort button label
+  const sortBtn = document.getElementById('sortToggleBtn');
+  if (sortBtn) sortBtn.textContent = eventsSortAsc ? '↑ Oldest first' : '↓ Newest first';
 }
 
 // ─── Tab: Customers ──────────────────────────────────────
