@@ -151,7 +151,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .form-inp{flex:1;border:none;background:none;font-size:15px;color:var(--label);font-family:inherit;text-align:right;outline:none;min-width:0;}
 .form-inp::placeholder{color:var(--label3);}
 .form-sel{flex:1;border:none;background:none;font-size:15px;color:var(--label);font-family:inherit;text-align:right;outline:none;-webkit-appearance:none;cursor:pointer;}
-.form-textarea{width:100%;border:none;background:none;font-size:15px;color:var(--label);font-family:inherit;outline:none;resize:none;padding:12px 16px;min-height:80px;}
+.form-textarea{width:100%;border:none;background:none;font-size:15px;color:var(--label);font-family:inherit;outline:none;resize:vertical;padding:12px 16px;min-height:72px;}
 
 /* ── Buttons ── */
 .btn-wrap{padding:0 16px;margin-top:12px;display:flex;flex-direction:column;gap:10px;}
@@ -278,6 +278,8 @@ let currentUser = null;
 let currentTab = 'home';
 let eventsFilter = 'all';
 let eventsSearch = '';
+let eventsSortAsc = true;
+let eventsCategoryFilter = [];
 let customersSearch = '';
 let staffSearch = '';
 let _syncTimer = null;
@@ -358,7 +360,7 @@ function pillClass(status) {
   return 'pill-booked';
 }
 
-function enrichedEvents() {
+function enrichedEvents(ascending=false) {
   const cmap = customerMap();
   return (state.events||[])
     .filter(e => !e.deleted)
@@ -367,7 +369,18 @@ function enrichedEvents() {
       customerName: (cmap[e.customerId]||{}).name||'Unassigned',
       customerPhone: (cmap[e.customerId]||{}).phone||'',
     }))
-    .sort((a,b) => String(b.date||'').localeCompare(String(a.date||'')));
+    .sort((a,b) => ascending
+      ? String(a.date||'').localeCompare(String(b.date||''))
+      : String(b.date||'').localeCompare(String(a.date||'')));
+}
+
+function allCategories() {
+  const cats = new Set();
+  (state.events||[]).filter(e=>!e.deleted).forEach(e => {
+    const c = e.category||e.eventType||'';
+    if (c) cats.add(c);
+  });
+  return [...cats].sort();
 }
 
 function bartenderAssignmentCost(a, ev) {
@@ -440,9 +453,10 @@ function renderTab(tab) {
 
 // ─── Tab: Home ───────────────────────────────────────────
 function getHomeHtml() {
-  const evs = enrichedEvents();
+  const evs = enrichedEvents(false); // descending for "recent completed"
+  const evsAsc = enrichedEvents(true); // ascending for upcoming (soonest first)
   const today = todayStr();
-  const upcoming = evs.filter(e => e.date >= today && !['completed','cancelled'].includes((e.status||'').toLowerCase()));
+  const upcoming = evsAsc.filter(e => e.date >= today && !['completed','cancelled'].includes((e.status||'').toLowerCase()));
   const completed = evs.filter(e => (e.status||'').toLowerCase()==='completed');
   const thisMonth = new Date().toISOString().slice(0,7);
   const monthRevenue = evs
@@ -453,7 +467,7 @@ function getHomeHtml() {
     return s + (ev.bartenderAssignments||[]).filter(a=>!a.paid).reduce((ss,a)=>ss+bartenderAssignmentCost(a,ev),0);
   }, 0);
 
-  const todayEvs = evs.filter(e => e.date===today);
+  const todayEvs = evsAsc.filter(e => e.date===today);
   const nextEvs = upcoming.filter(e => e.date > today).slice(0,5);
 
   let html = `<div class="page-title">👋 Hello, Alberto</div>`;
@@ -511,11 +525,49 @@ function eventCell(e) {
 
 // ─── Tab: Events ─────────────────────────────────────────
 function getEventsHtml() {
-  let evs = enrichedEvents();
+  const cats = allCategories();
+
+  let html = `<div class="search-wrap"><div class="search-bar">
+    <span style="color:var(--label2);font-size:16px;">🔍</span>
+    <input class="search-inp" id="evSearch" placeholder="Search events…" value="${safe(eventsSearch)}"
+      oninput="eventsSearch=this.value;updateEventsList()">
+  </div></div>`;
+
+  html += `<div style="display:flex;align-items:center;gap:6px;padding:0 16px 4px;">
+    <div class="seg-wrap" style="flex:1;margin:8px 0 0;">
+      <button class="seg-btn ${eventsFilter==='all'?'active':''}" onclick="eventsFilter='all';updateEventsList()">All</button>
+      <button class="seg-btn ${eventsFilter==='upcoming'?'active':''}" onclick="eventsFilter='upcoming';updateEventsList()">Upcoming</button>
+      <button class="seg-btn ${eventsFilter==='completed'?'active':''}" onclick="eventsFilter='completed';updateEventsList()">Done</button>
+      <button class="seg-btn ${eventsFilter==='cancelled'?'active':''}" onclick="eventsFilter='cancelled';updateEventsList()">Cancelled</button>
+    </div>
+    <button onclick="eventsSortAsc=!eventsSortAsc;updateEventsList()" title="Toggle sort order"
+      style="flex-shrink:0;margin-top:8px;background:var(--fill);border:none;border-radius:8px;padding:7px 10px;font-size:14px;cursor:pointer;color:var(--label);">
+      ${eventsSortAsc?'↑ Date':'↓ Date'}
+    </button>
+  </div>`;
+
+  if (cats.length) {
+    html += `<div style="padding:4px 16px 0;display:flex;flex-wrap:wrap;gap:6px;" id="catFilterWrap">`;
+    cats.forEach(c => {
+      const active = eventsCategoryFilter.includes(c);
+      html += `<button onclick="toggleCategoryFilter('${safe(c)}')" style="padding:5px 12px;border-radius:20px;font-size:13px;font-weight:600;border:1.5px solid ${active?'var(--primary)':'var(--sep)'};background:${active?'var(--primary)':'var(--surface)'};color:${active?'#fff':'var(--label)'};cursor:pointer;">${safe(c)}</button>`;
+    });
+    if (eventsCategoryFilter.length) {
+      html += `<button onclick="eventsCategoryFilter=[];updateEventsList()" style="padding:5px 12px;border-radius:20px;font-size:13px;border:1.5px solid var(--sep);background:none;color:var(--label2);cursor:pointer;">✕ Clear</button>`;
+    }
+    html += `</div>`;
+  }
+
+  html += `<div id="eventsListContainer">${getEventsListHtml()}</div>`;
+  return html;
+}
+
+function getEventsListHtml() {
+  let evs = enrichedEvents(eventsSortAsc);
 
   if (eventsSearch) {
     const q = eventsSearch.toLowerCase();
-    evs = evs.filter(e => [e.eventName,e.customerName,e.venueName,e.location,e.status].join(' ').toLowerCase().includes(q));
+    evs = evs.filter(e => [e.eventName,e.customerName,e.venueName,e.location,e.status,e.category,e.eventType].join(' ').toLowerCase().includes(q));
   }
 
   if (eventsFilter!=='all') {
@@ -526,26 +578,42 @@ function getEventsHtml() {
     }
   }
 
-  let html = `<div class="search-wrap"><div class="search-bar">
-    <span class="search-inp" style="color:var(--label2);font-size:16px;">🔍</span>
-    <input class="search-inp" id="evSearch" placeholder="Search events…" value="${safe(eventsSearch)}" oninput="eventsSearch=this.value;renderTab('events')">
-  </div></div>`;
-
-  html += `<div class="seg-wrap">
-    <button class="seg-btn ${eventsFilter==='all'?'active':''}" onclick="eventsFilter='all';renderTab('events')">All</button>
-    <button class="seg-btn ${eventsFilter==='upcoming'?'active':''}" onclick="eventsFilter='upcoming';renderTab('events')">Upcoming</button>
-    <button class="seg-btn ${eventsFilter==='completed'?'active':''}" onclick="eventsFilter='completed';renderTab('events')">Done</button>
-    <button class="seg-btn ${eventsFilter==='cancelled'?'active':''}" onclick="eventsFilter='cancelled';renderTab('events')">Cancelled</button>
-  </div>`;
-
-  if (!evs.length) {
-    html += `<div class="empty"><div class="empty-icon">📅</div><div class="empty-title">No events found</div><div class="empty-sub">Tap + to add a new event.</div></div>`;
-  } else {
-    html += `<div class="list" style="margin:0 16px;">`;
-    evs.forEach(e => { html += eventCell(e); });
-    html += `</div>`;
+  if (eventsCategoryFilter.length) {
+    evs = evs.filter(e => eventsCategoryFilter.includes(e.category||e.eventType||''));
   }
-  return html;
+
+  if (!evs.length) return `<div class="empty"><div class="empty-icon">📅</div><div class="empty-title">No events found</div><div class="empty-sub">Tap + to add a new event.</div></div>`;
+  return `<div class="list" style="margin:8px 16px 0;">${evs.map(e=>eventCell(e)).join('')}</div>`;
+}
+
+function updateEventsList() {
+  const container = document.getElementById('eventsListContainer');
+  if (container) {
+    container.innerHTML = getEventsListHtml();
+    // Update sort button label
+    const sortBtn = document.querySelector('[title="Toggle sort order"]');
+    if (sortBtn) sortBtn.textContent = eventsSortAsc ? '↑ Date' : '↓ Date';
+    // Update category pills
+    const cats = allCategories();
+    const wrap = document.getElementById('catFilterWrap');
+    if (wrap && cats.length) {
+      wrap.innerHTML = cats.map(c => {
+        const active = eventsCategoryFilter.includes(c);
+        return `<button onclick="toggleCategoryFilter('${safe(c)}')" style="padding:5px 12px;border-radius:20px;font-size:13px;font-weight:600;border:1.5px solid ${active?'var(--primary)':'var(--sep)'};background:${active?'var(--primary)':'var(--surface)'};color:${active?'#fff':'var(--label)'};cursor:pointer;">${safe(c)}</button>`;
+      }).join('') + (eventsCategoryFilter.length
+        ? `<button onclick="eventsCategoryFilter=[];updateEventsList()" style="padding:5px 12px;border-radius:20px;font-size:13px;border:1.5px solid var(--sep);background:none;color:var(--label2);cursor:pointer;">✕ Clear</button>`
+        : '');
+    }
+  } else {
+    renderTab('events');
+  }
+}
+
+function toggleCategoryFilter(cat) {
+  const idx = eventsCategoryFilter.indexOf(cat);
+  if (idx>=0) eventsCategoryFilter.splice(idx,1);
+  else eventsCategoryFilter.push(cat);
+  updateEventsList();
 }
 
 // ─── Tab: Customers ──────────────────────────────────────
@@ -679,6 +747,7 @@ function openEventDetail(id) {
         ${safe(cust.name||'Unassigned')}
         ${cust.phone?` · <a href="tel:${safe(cust.phone)}">${safe(fmtPhone(cust.phone))}</a>`:''}
       </span></div>
+      ${(ev.category||ev.eventType)?`<div class="detail-row"><span class="detail-lbl">Category</span><span class="detail-val">${safe(ev.category||ev.eventType)}</span></div>`:''}
       ${ev.venueName||ev.location?`<div class="detail-row"><span class="detail-lbl">Venue</span><span class="detail-val">${safe(ev.venueName||ev.location||'')}</span></div>`:''}
       ${ev.venueAddress?`<div class="detail-row"><span class="detail-lbl">Address</span><span class="detail-val">${safe(ev.venueAddress)}</span></div>`:''}
       ${ev.guestCount?`<div class="detail-row"><span class="detail-lbl">Guests</span><span class="detail-val">${safe(ev.guestCount)}</span></div>`:''}
@@ -774,6 +843,7 @@ function openEditEvent(id) {
           ${statusOpts.map(s=>`<option value="${s}" ${ev.status===s?'selected':''}>${s.charAt(0).toUpperCase()+s.slice(1)}</option>`).join('')}
         </select>
       </div>
+      <div class="form-row"><label class="form-lbl">Category</label><input class="form-inp" id="fe_category" placeholder="e.g. Wedding, Corporate…" value="${safe(ev.category||ev.eventType||'')}"></div>
       <div class="form-row"><label class="form-lbl">Guests</label><input class="form-inp" id="fe_guests" type="number" placeholder="0" value="${safe(ev.guestCount||'')}"></div>
     </div>
   </div>`;
@@ -842,10 +912,13 @@ function openEditEvent(id) {
   }
   html += `</div>`;
 
+  const descRows = Math.max(4, ((ev.description||'').match(/\n/g)||[]).length + Math.ceil((ev.description||'').length/50) + 1);
+  const updateRows = Math.max(3, ((ev.latestUpdate||'').match(/\n/g)||[]).length + Math.ceil((ev.latestUpdate||'').length/50) + 1);
+
   html += `<div class="form-section"><div class="form-section-label">Notes</div>
     <div class="form-group">
-      <textarea class="form-textarea" id="fe_notes" placeholder="Event description…">${safe(ev.description||'')}</textarea>
-      <textarea class="form-textarea" id="fe_update" placeholder="Latest update…">${safe(ev.latestUpdate||'')}</textarea>
+      <textarea class="form-textarea" id="fe_notes" placeholder="Event description…" rows="${descRows}" style="min-height:${descRows*24+16}px;">${safe(ev.description||'')}</textarea>
+      <textarea class="form-textarea" id="fe_update" placeholder="Latest update…" rows="${updateRows}" style="min-height:${updateRows*24+16}px;">${safe(ev.latestUpdate||'')}</textarea>
     </div>
   </div>`;
 
@@ -869,6 +942,7 @@ function saveEventForm(id) {
     startTime: document.getElementById('fe_start').value,
     endTime: document.getElementById('fe_end').value,
     status: document.getElementById('fe_status').value,
+    category: document.getElementById('fe_category').value,
     guestCount: document.getElementById('fe_guests').value,
     customerId: document.getElementById('fe_cust').value,
     venueName: document.getElementById('fe_venue').value,
