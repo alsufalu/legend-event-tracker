@@ -5805,7 +5805,10 @@ renderAll();ensureEditableContractFields();
           var allRows=[];
           allBarts.forEach(function(b){
             if(typeof getBartenderEventRows==='function'){
-              getBartenderEventRows(b.id).forEach(function(r){ allRows.push(r); });
+              getBartenderEventRows(b.id).forEach(function(r){
+                var s=(r.status||'').toLowerCase();
+                if(s==='completed'||s==='booked') allRows.push(r);
+              });
             }
           });
           window._rptStaffEventsRows=allRows;
@@ -5887,7 +5890,10 @@ renderAll();ensureEditableContractFields();
             rows=[];
             (state.bartenders||[]).forEach(function(b){
               if(typeof getBartenderEventRows==='function'){
-                getBartenderEventRows(b.id).forEach(function(r){ rows.push(r); });
+                getBartenderEventRows(b.id).forEach(function(r){
+                  var s=(r.status||'').toLowerCase();
+                  if(s==='completed'||s==='booked') rows.push(r);
+                });
               }
             });
           }

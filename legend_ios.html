@@ -1189,6 +1189,8 @@ function openReport(id) {
     const rows = [];
     (state.bartenders||[]).forEach(b => {
       (state.events||[]).filter(e=>!e.deleted).forEach(ev => {
+        const s=(ev.status||'').toLowerCase();
+        if(s!=='completed'&&s!=='booked') return;
         const a=(ev.bartenderAssignments||[]).find(a=>a.id===b.id);
         if(!a) return;
         rows.push({ name:b.name||'', evName:ev.eventName||'', date:ev.date||'', start:ev.startTime||'', end:ev.endTime||'', status:ev.status||'', cost:bartenderAssignmentCost(a,ev), paid:a.paid, evId:ev.id, role:a.role||'Bartender', laborPay:0, travelPay:Number(a.travelPay||0), expense:Number(a.expenseReimbursement||0) });
