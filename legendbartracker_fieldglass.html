@@ -347,6 +347,7 @@ tr:hover td { background:var(--surface2); }
   transition:box-shadow .12s, border-color .12s;
 }
 .summary-item:hover { box-shadow:var(--shadow); border-color:var(--border2); }
+.summary-item.active-event { border-left:3px solid var(--blue); box-shadow:0 0 0 2px rgba(59,130,246,.18); }
 .summary-blue { background:#f0f6ff; border-color:#c7ddf9; }
 .summary-red { background:#fff5f5; border-color:#ffd0cc; }
 .summary-yellow { background:#fffdf0; border-color:#ffe580; }
@@ -2472,6 +2473,10 @@ window.editEvent = function(id) {
   renderBartenderSelect(e.bartenderAssignments||[]); ensureEditableContractFields(); updateDurationField(); updateBalanceDueField();
   switchTab("events"); if(typeof switchEventSubtab==="function") switchEventSubtab("form"); if(window.activateEventFormScreen) window.activateEventFormScreen("eventDetailsSection");
   const formPanel=document.querySelector('[data-event-panel="form"]'); if(formPanel) formPanel.scrollIntoView({behavior:"smooth",block:"start"});
+  // Highlight selected event in left panel
+  document.querySelectorAll('.summary-item[data-event-id]').forEach(el=>el.classList.remove('active-event'));
+  const activeEl=document.querySelector(`.summary-item[data-event-id="${CSS.escape(String(id))}"]`);
+  if(activeEl){activeEl.classList.add('active-event');activeEl.scrollIntoView({behavior:'smooth',block:'nearest'});}
 };
 window.deleteEvent = function(id) {
   id=String(id||""); const event=(state.events||[]).find(e=>String(e.id)===id); const eventName=event&&event.eventName?event.eventName:"this event";
