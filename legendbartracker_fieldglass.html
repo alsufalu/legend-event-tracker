@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260615_064';
+  const BUILD='v20260616_066';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -843,6 +843,28 @@ tr:hover td { background:var(--surface2); }
 
     <!-- Events Tab -->
     <section id="eventsTab" class="hidden">
+
+      <!-- View toggle bar -->
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--surface2);border-bottom:1px solid var(--border);">
+        <span style="font-weight:700;font-size:13px;margin-right:auto;">Events</span>
+        <button type="button" id="eventsListViewBtn" class="primary" style="font-size:12px;padding:4px 10px;">☰ List</button>
+        <button type="button" id="eventsCalendarViewBtn" style="font-size:12px;padding:4px 10px;">📅 Calendar</button>
+      </div>
+
+      <!-- Calendar view (hidden by default) -->
+      <div id="eventsCalendarView" class="hidden" style="padding:14px;">
+        <div class="calendar-toolbar">
+          <button type="button" id="calendarPrevBtn" style="padding:4px 10px;">‹ Prev</button>
+          <button type="button" id="calendarTodayBtn" style="padding:4px 10px;">Today</button>
+          <button type="button" id="calendarNextBtn" style="padding:4px 10px;">Next ›</button>
+          <span id="calendarTitle" class="calendar-title"></span>
+          <button type="button" class="primary" id="newEventBtnCal" style="font-size:12px;padding:4px 10px;">+ New</button>
+        </div>
+        <div class="calendar-grid" id="eventsCalendarGrid"></div>
+      </div>
+
+      <!-- List view (default) -->
+      <div id="eventsListView">
       <div class="events-split-layout">
 
         <!-- LEFT: scrollable event list -->
@@ -1086,6 +1108,7 @@ tr:hover td { background:var(--surface2); }
 
         </div><!-- end events-detail-pane -->
       </div><!-- end events-split-layout -->
+      </div><!-- end #eventsListView -->
     </section>
 
     <!-- Reports Tab -->
@@ -2378,6 +2401,7 @@ document.getElementById("saveBartenderBtn").addEventListener("click", () => {
   saveState(); clearBartenderForm(); renderAll(); switchTab("bartenders");
 });
 document.getElementById("newEventBtn").addEventListener("click", () => { clearEventForm(); switchTab("events"); window.scrollTo({ top: 0, behavior: "smooth" }); });
+document.getElementById("newEventBtnCal").addEventListener("click", () => { eventsViewMode="list"; renderEvents(); clearEventForm(); switchTab("events"); window.scrollTo({ top: 0, behavior: "smooth" }); });
 function buildEventPayloadFromForm() {
   const contractPricing = applyContractPricingToForm();
   const depositPaid = numeric(document.getElementById("eDepositPaid").value) || 0;
@@ -2769,6 +2793,19 @@ renderAll();ensureEditableContractFields();
   window.activateEventFormScreen=showFormSection;window.activateEventFormSection=showFormSection;window.switchTab=showMainTab;window.switchEventSubtab=showEventSubtab;
   function init(){showMainTab("summary");showEventSubtab("lead");showFormSection("eventDetailsSection");}
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
+})();
+
+/* ── Event list highlight — must register BEFORE finalEventClickNoMessageFix
+   so this capture listener fires before stopImmediatePropagation is called ── */
+(function eventListHighlight(){
+  document.addEventListener('click', function(e){
+    var row = e.target.closest && e.target.closest('.summary-item[data-event-id]');
+    if (!row) return;
+    var id = row.getAttribute('data-event-id');
+    if (!id) return;
+    document.querySelectorAll('.summary-item[data-event-id]').forEach(function(el){ el.classList.remove('active-event'); });
+    row.classList.add('active-event');
+  }, true); // capture phase — fires before the stopImmediatePropagation listener
 })();
 
 (function finalEventClickNoMessageFix(){
@@ -4189,8 +4226,14 @@ renderAll();ensureEditableContractFields();
   function stampEvents(){
     if(!state||!state.events) return;
     var now=new Date().toISOString();
+    var todayMs=new Date().setHours(23,59,59,999);
     state.events.forEach(function(e){
-      if(!e.createdAt) e.createdAt=e.date?e.date+'T00:00:00.000Z':now;
+      if(!e.createdAt){
+        /* Use event date only if it's in the past — future-dated events were entered
+           recently so use today as createdAt so they appear in the current chart window */
+        var evDateMs=e.date?new Date(e.date).getTime():0;
+        e.createdAt=(evDateMs>0&&evDateMs<=todayMs)?e.date+'T00:00:00.000Z':now;
+      }
       if((e.status==='booked'||e.status==='completed')&&!e.bookedAt) e.bookedAt=e.date?e.date+'T00:00:00.000Z':now;
     });
   }

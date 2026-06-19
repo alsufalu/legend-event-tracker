@@ -279,6 +279,9 @@ let currentTab = 'home';
 let eventsFilter = 'all';
 let eventsSearch = '';
 let eventsSortAsc = true;
+let iosEventsViewMode = 'list'; // 'list' or 'calendar'
+let iosCalCursor = (() => { const d = new Date(); d.setDate(1); return d; })();
+let iosCalSelectedDate = null;
 let customersSearch = '';
 let staffSearch = '';
 let _syncTimer = null;
@@ -539,7 +542,20 @@ function statusChipsHtml() {
 }
 
 function getEventsHtml() {
-  let html = `<div class="search-wrap"><div class="search-bar">
+  // List / Calendar toggle
+  const btnBase = 'border:none;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:600;';
+  let html = `<div style="display:flex;gap:8px;padding:10px 16px 4px;align-items:center;">
+    <button onclick="iosEventsViewMode='list';renderTab('events')" style="${btnBase}background:${iosEventsViewMode==='list'?'var(--primary)':'var(--fill)'};color:${iosEventsViewMode==='list'?'#fff':'var(--label)'};">☰ List</button>
+    <button onclick="iosEventsViewMode='calendar';renderTab('events')" style="${btnBase}background:${iosEventsViewMode==='calendar'?'var(--primary)':'var(--fill)'};color:${iosEventsViewMode==='calendar'?'#fff':'var(--label)'};">📅 Calendar</button>
+  </div>`;
+
+  if (iosEventsViewMode === 'calendar') {
+    html += iosCalMonthHtml();
+    return html;
+  }
+
+  // List mode
+  html += `<div class="search-wrap"><div class="search-bar">
     <span style="color:var(--label2);font-size:16px;">🔍</span>
     <input class="search-inp" id="evSearch" placeholder="Search events…" value="${safe(eventsSearch)}"
       oninput="eventsSearch=this.value;updateEventsList()">
@@ -584,6 +600,74 @@ function updateEventsList() {
   // Refresh sort button label
   const sortBtn = document.getElementById('sortToggleBtn');
   if (sortBtn) sortBtn.textContent = eventsSortAsc ? '↑ Oldest first' : '↓ Newest first';
+}
+
+// ─── iOS Calendar View ───────────────────────────────────
+const STATUS_COLORS = { booked:'#16a34a', completed:'#2563eb', deciding:'#d97706', lost:'#dc2626', cancelled:'#6b7280', canceled:'#6b7280', 'in-progress':'#7c3aed', confirmed:'#0891b2', pending:'#78350f' };
+function iosCalMonthHtml() {
+  const evs = enrichedEvents(true);
+  // Build date → events map
+  const byDate = {};
+  evs.forEach(e => { if (e.date) { (byDate[e.date] = byDate[e.date]||[]).push(e); } });
+
+  const yr = iosCalCursor.getFullYear(), mo = iosCalCursor.getMonth();
+  const monthLabel = iosCalCursor.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+  const today = new Date(); const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  // Calendar grid start: Sunday of the week containing the 1st
+  const first = new Date(yr, mo, 1);
+  const startDay = new Date(first); startDay.setDate(1 - first.getDay());
+
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let grid = `<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin:0 12px;">`;
+  // Headers
+  dayNames.forEach(d => { grid += `<div style="text-align:center;font-size:11px;font-weight:600;color:var(--label2);padding:4px 0;">${d}</div>`; });
+
+  // 6 weeks max
+  const cur = new Date(startDay);
+  for (let i = 0; i < 42; i++) {
+    const key = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
+    const inMonth = cur.getMonth() === mo;
+    const isToday = key === todayKey;
+    const isSelected = key === iosCalSelectedDate;
+    const dayEvs = byDate[key] || [];
+    const dateStr = JSON.stringify(key);
+
+    grid += `<div onclick="iosCalSelectedDate=${dateStr};document.getElementById('iosCalDay').innerHTML=iosCalDayEventsHtml(${dateStr});" style="
+      min-height:52px;border-radius:10px;padding:4px;cursor:pointer;text-align:center;
+      background:${isSelected?'var(--primary)':isToday?'rgba(var(--primary-rgb,0,122,255),0.12)':'var(--fill)'};
+      opacity:${inMonth?1:0.35};border:${isSelected?'2px solid var(--primary)':'2px solid transparent'};
+    ">
+      <div style="font-size:13px;font-weight:${isToday?700:500};color:${isSelected?'#fff':isToday?'var(--primary)':'var(--label)'};">${cur.getDate()}</div>
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:2px;margin-top:2px;">
+        ${dayEvs.slice(0,3).map(e=>`<div style="width:6px;height:6px;border-radius:50%;background:${STATUS_COLORS[(e.status||'').toLowerCase()]||'var(--primary)'};"></div>`).join('')}
+        ${dayEvs.length>3?`<div style="font-size:9px;color:${isSelected?'#fff':'var(--label2)'};">+${dayEvs.length-3}</div>`:''}
+      </div>
+    </div>`;
+    cur.setDate(cur.getDate() + 1);
+    // Stop after 4 weeks if we've left the month and it's a Sunday
+    if (i >= 27 && cur.getMonth() !== mo && cur.getDay() === 0) break;
+  }
+  grid += `</div>`;
+
+  let html = `
+    <div style="display:flex;align-items:center;padding:10px 16px 6px;gap:8px;">
+      <button onclick="iosCalCursor.setMonth(iosCalCursor.getMonth()-1);renderTab('events')" style="background:var(--fill);border:none;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer;">‹</button>
+      <div style="flex:1;text-align:center;font-weight:700;font-size:16px;">${monthLabel}</div>
+      <button onclick="iosCalCursor.setMonth(iosCalCursor.getMonth()+1);renderTab('events')" style="background:var(--fill);border:none;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer;">›</button>
+    </div>
+    ${grid}
+    <div id="iosCalDay" style="padding:8px 16px 0;">${iosCalSelectedDate?iosCalDayEventsHtml(iosCalSelectedDate):''}</div>
+  `;
+  return html;
+}
+
+function iosCalDayEventsHtml(dateKey) {
+  const evs = enrichedEvents(true).filter(e => e.date === dateKey);
+  if (!evs.length) return `<div style="text-align:center;color:var(--label2);padding:16px;font-size:14px;">No events on this day</div>`;
+  const label = new Date(dateKey+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  return `<div><div style="font-weight:600;font-size:14px;margin-bottom:6px;color:var(--label);">${label}</div>
+    <div class="list">${evs.map(e=>eventCell(e)).join('')}</div></div>`;
 }
 
 // ─── Tab: Customers ──────────────────────────────────────
