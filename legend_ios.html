@@ -549,6 +549,9 @@ function getEventsHtml() {
     <button onclick="iosEventsViewMode='calendar';renderTab('events')" style="${btnBase}background:${iosEventsViewMode==='calendar'?'var(--primary)':'var(--fill)'};color:${iosEventsViewMode==='calendar'?'#fff':'var(--label)'};">📅 Calendar</button>
   </div>`;
 
+  // Status filter chips always visible
+  html += statusChipsHtml();
+
   if (iosEventsViewMode === 'calendar') {
     html += iosCalMonthHtml();
     return html;
@@ -560,8 +563,6 @@ function getEventsHtml() {
     <input class="search-inp" id="evSearch" placeholder="Search events…" value="${safe(eventsSearch)}"
       oninput="eventsSearch=this.value;updateEventsList()">
   </div></div>`;
-
-  html += statusChipsHtml();
 
   html += `<div style="display:flex;justify-content:flex-end;padding:0 16px 4px;">
     <button onclick="eventsSortAsc=!eventsSortAsc;updateEventsList()" id="sortToggleBtn"
@@ -605,7 +606,9 @@ function updateEventsList() {
 // ─── iOS Calendar View ───────────────────────────────────
 const STATUS_COLORS = { booked:'#16a34a', completed:'#2563eb', deciding:'#d97706', lost:'#dc2626', cancelled:'#6b7280', canceled:'#6b7280', 'in-progress':'#7c3aed', confirmed:'#0891b2', pending:'#78350f' };
 function iosCalMonthHtml() {
-  const evs = enrichedEvents(true);
+  // Apply same status filter as the chips
+  let evs = enrichedEvents(true);
+  if (eventsFilter !== 'all') evs = evs.filter(e => (e.status||'').toLowerCase() === eventsFilter);
   // Build date → events map
   const byDate = {};
   evs.forEach(e => { if (e.date) { (byDate[e.date] = byDate[e.date]||[]).push(e); } });
@@ -663,7 +666,8 @@ function iosCalMonthHtml() {
 }
 
 function iosCalDayEventsHtml(dateKey) {
-  const evs = enrichedEvents(true).filter(e => e.date === dateKey);
+  let evs = enrichedEvents(true).filter(e => e.date === dateKey);
+  if (eventsFilter !== 'all') evs = evs.filter(e => (e.status||'').toLowerCase() === eventsFilter);
   if (!evs.length) return `<div style="text-align:center;color:var(--label2);padding:16px;font-size:14px;">No events on this day</div>`;
   const label = new Date(dateKey+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
   return `<div><div style="font-weight:600;font-size:14px;margin-bottom:6px;color:var(--label);">${label}</div>
