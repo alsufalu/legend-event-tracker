@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260624_076';
+  const BUILD='v20260624_078';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1076,7 +1076,11 @@ tr:hover td { background:var(--surface2); }
         </div>
 
         <div style="height:8px;"></div>
-        <div class="buttonbar" style="margin-top:12px;"></div>
+        <div class="buttonbar" style="margin-top:12px;">
+          <button class="primary" id="saveEventVisibleBtn" style="padding:9px 24px;font-size:14px;">💾 Save event</button>
+          <button id="clearEventVisibleBtn" style="padding:9px 16px;font-size:14px;">Clear form</button>
+          <span id="eventSavedMsg" style="font-size:13px;color:#34d399;display:none;margin-left:8px;">✓ Event saved!</span>
+        </div>
 
         <!-- Financial Readout collapsible section -->
         <div style="margin-top:18px;border-top:2px solid var(--border);padding-top:14px;">
@@ -2447,6 +2451,39 @@ document.getElementById("saveEventBtn").addEventListener("click", async () => {
   try { const saved = saveEventPayloadFromForm({ keepFormOpen:false }); if (saved) alert("Event saved locally in this browser."); }
   catch (err) { console.error("Save event failed", err); alert("Save event failed: " + (err && err.message ? err.message : err)); }
 });
+/* Visible Save / Clear buttons in the event form */
+(function(){
+  var saveBtn = document.getElementById("saveEventVisibleBtn");
+  var clearBtn = document.getElementById("clearEventVisibleBtn");
+  var savedMsg = document.getElementById("eventSavedMsg");
+  if(saveBtn) saveBtn.addEventListener("click", function(){
+    try{
+      var saved = saveEventPayloadFromForm({keepFormOpen: true});
+      if(saved){
+        if(savedMsg){ savedMsg.style.display="inline"; setTimeout(function(){ savedMsg.style.display="none"; }, 2500); }
+        /* Update the banner to show the saved event name */
+        var banner=document.getElementById('evNameBanner');
+        if(banner&&typeof updateBanner==='function') updateBanner(saved.id);
+        else if(banner){
+          var ev=(state.events||[]).find(function(e){ return String(e.id)===String(saved.id); });
+          if(ev){
+            var stColors={booked:'#4ade80',completed:'#60a5fa',deciding:'#fbbf24',lost:'#f87171',canceled:'#9ca3af'};
+            var st=(ev.status||'').toLowerCase();
+            banner.style.display='block';
+            banner.innerHTML='📋 '+(ev.eventName||'').replace(/</g,'&lt;')
+              +(st?'<span style="margin-left:10px;font-size:11px;font-weight:600;background:rgba(0,0,0,.25);color:'+(stColors[st]||'#fff')
+                +';padding:2px 9px;border-radius:10px;text-transform:uppercase;letter-spacing:.05em;">'+st+'</span>':'');
+          }
+        }
+      }
+    }catch(err){ alert("Save failed: "+(err&&err.message?err.message:err)); }
+  });
+  if(clearBtn) clearBtn.addEventListener("click", function(){
+    if(typeof clearEventForm==='function') clearEventForm();
+    var banner=document.getElementById('evNameBanner');
+    if(banner) banner.style.display='none';
+  });
+})();
 document.getElementById("saveCostBtn").addEventListener("click", () => {
   const payload = { id: editingCostId || nextId("G", state.overheadCosts || []), name: document.getElementById("gCostName").value.trim(), category: document.getElementById("gCostCategory").value.trim(), amount: numeric(document.getElementById("gCostAmount").value) || 0, date: document.getElementById("gCostDate").value, notes: document.getElementById("gCostNotes").value.trim() };
   if (!payload.name) return alert("Please enter a cost name.");
@@ -6311,6 +6348,9 @@ renderAll();ensureEditableContractFields();
   /* ── Helper: pre-fill new event form from a Thumbtack lead row ── */
   window.prefillNewEventFromLead=function(lead){
     if(typeof clearEventForm==='function')clearEventForm();
+    /* Hide the "currently editing" banner — this is a new event, not an existing one */
+    var evBanner=document.getElementById('evNameBanner');
+    if(evBanner) evBanner.style.display='none';
     setTimeout(function(){
       var nameEl        =document.getElementById('eNewCustomerName');
       var phoneEl       =document.getElementById('eNewCustomerPhone');
