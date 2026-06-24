@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260619_067';
+  const BUILD='v20260620_068';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -939,6 +939,9 @@ tr:hover td { background:var(--surface2); }
               <div class="field-wrap"><label class="field-label" for="eBarSetup">Bar setup</label><select id="eBarSetup"><option value="existing">Existing bar on site</option><option value="portable">Bring portable bar</option><option value="other">Other setup</option></select></div>
             </div>
             <div class="field-wrap" id="eventDescriptionWrap"><label class="field-label" for="eDescription">Description</label><textarea id="eDescription" placeholder="Description"></textarea></div>
+            <div style="margin-top:10px;">
+              <button type="button" id="exportEventSummaryPdfBtn" style="font-size:12px;padding:5px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--fg);">📄 Export Summary PDF</button>
+            </div>
           </div>
         </div>
 
@@ -2610,6 +2613,79 @@ function generateContractHtml(event){
   if(selectedTemplate&&!looksLikeCorruptContractTemplate(selectedTemplate))return renderSelectedContractTemplate(selectedTemplate,buildContractTemplateValues(event,rowHtml,quoteTotal,duration,venueDisplay));
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Legend Bartending Contract</title><style>body{font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#111;}h1{font-size:16pt;margin:14px 0 8px;}table{border-collapse:collapse;width:100%;margin:10px 0;}th,td{border:1px solid #999;padding:7px;vertical-align:top;}th{background:#eee;}.info td{border:none;padding:4px 6px;}.label{font-weight:bold;width:170px;}.right{text-align:right;}.sig td{border:none;padding-top:18px;}</style></head><body><p class="right">${formatDateLong(new Date().toISOString().slice(0,10))}</p><p>Thank you for your interest in Legend bartending service. We have prepared a contract and quotation for your event. Please review all details carefully and let us know if you have any questions or require any tweaks.</p><h1>Bartending Service Quote</h1><table class="info"><tr><td class="label">Prepared for:</td><td>${safe(customer.name||event.eventName)}</td></tr><tr><td class="label">Event Type:</td><td>${safe(event.eventType)}</td></tr><tr><td class="label">Event Date:</td><td>${safe(formatDateLong(event.date))}</td></tr><tr><td class="label">Duration:</td><td>${safe(duration)}</td></tr><tr><td class="label">Start-End time:</td><td>${safe(formatTimeForContract(event.startTime))} - ${safe(formatTimeForContract(event.endTime))}</td></tr><tr><td class="label">Number of guests:</td><td>approximately ${safe(event.guestCount)}</td></tr><tr><td class="label">Venue:</td><td>${safe(venueDisplay)}</td></tr></table><table><thead><tr><th>Service item / Description</th><th># staff</th><th>Qty/Hours</th><th>Rate</th><th>Total</th></tr></thead><tbody>${rowHtml}<tr><td colspan="4" class="right"><strong>Total Quote</strong></td><td><strong>${formatMoneyForContract(quoteTotal)}</strong></td></tr></tbody></table><p>This price includes all bartending labor, planning, and service outlined below.</p><p><strong>What's included:</strong></p><ul><li>Professional, licensed bartender(s)</li><li>Liquor liability insurance</li><li>Up to ${safe(duration)} of bartending service</li><li>Pre-event consultation and planning</li><li>Alcohol quantity recommendations & shopping list</li><li>Bar setup and breakdown</li><li>${safe(barSetupContractDescription(event))}</li><li>All standard bar tools (shakers, strainers, jiggers, etc.)</li><li>Garnishes, syrups, bar napkins, straws</li><li>Friendly, professional guest interaction and service</li><li>Responsible alcohol service</li></ul><p><strong>What's not included:</strong></p><ul><li>Customer to pay for the alcohol and all other supplies including alcohol, cups, ice</li></ul><p><strong>Terms:</strong></p><ul><li>A non refundable deposit of ${formatMoneyForContract(event.depositRequired)} (${safe(event.contractDepositPercent??30)}%) is required to secure the date. Your event is officially booked once the deposit is received. Deposits can be paid by Zelle to 630-240-3565 (Alberto Rubio).</li><li>Remaining balance due no later than 24 hours prior to the event start time.</li><li>Cancellations made 7 days or more before the event may apply the deposit toward a future date, subject to availability.</li><li>Cancellations made within 7 days of the event will forfeit the deposit.</li><li>Same-day cancellations are non-refundable.</li><li>Any service requested beyond the agreed time is subject to availability and billed at $50 per additional hour, payable immediately.</li><li>Legend Bartending total liability for any claim arising from this agreement shall not exceed the total amount paid under this contract.</li><li>Neither party shall be liable for failure to perform due to circumstances beyond reasonable control, including but not limited to weather, venue closure, government action, or emergencies.</li><li>Payment methods accepted: Zelle, cash, Venmo.</li><li>Client is responsible for ensuring all guests consuming alcohol are of legal drinking age. Bartender reserves the right to refuse service to any guest who appears intoxicated or unsafe. Client assumes responsibility for guest behavior and alcohol consumption during the event.</li>${event.customContractTerms?`<li>Custom notes / terms: ${safe(event.customContractTerms)}</li>`:""}</ul><table class="sig"><tr><td>Name: Alberto Rubio</td><td>Name: ________________________</td></tr><tr><td>Company: Legend Bartending</td><td>Company: _____________________</td></tr><tr><td>Signature: ____________________</td><td>Signature: _____________________</td></tr><tr><td>Date: ${formatDateLong(new Date().toISOString().slice(0,10))}</td><td>Date: _________________________</td></tr></table></body></html>`;
 }
+function exportEventSummaryPdf(eventId) {
+  var ev = eventId ? (state.events||[]).find(e=>String(e.id||'')===String(eventId||'')) : null;
+  // Prefer live form values when form is open for this event
+  var name, date, startTime, endTime, custName, custPhone, description, venueName, venueAddress, guests, status;
+  if (!eventId || String(editingEventId||'')===String(eventId||'')) {
+    name        = (document.getElementById('eName')?.value||'').trim();
+    date        = (document.getElementById('eDate')?.value||'').trim();
+    startTime   = (document.getElementById('eStartTime')?.value||'').trim();
+    endTime     = (document.getElementById('eEndTime')?.value||'').trim();
+    custName    = (document.getElementById('eNewCustomerName')?.value||'').trim();
+    custPhone   = (document.getElementById('eNewCustomerPhone')?.value||'').trim();
+    description = (document.getElementById('eDescription')?.value||'').trim();
+    venueName   = (document.getElementById('eVenueName')?.value||'').trim();
+    venueAddress= (document.getElementById('eVenueAddress')?.value||'').trim();
+    guests      = (document.getElementById('eGuests')?.value||'').trim();
+    status      = (document.getElementById('eStatus')?.value||'').trim();
+  } else if (ev) {
+    var cust = (customerMap()[ev.customerId]||{});
+    name=ev.eventName||''; date=ev.date||''; startTime=ev.startTime||''; endTime=ev.endTime||'';
+    custName=cust.name||ev.customerName||''; custPhone=cust.phone||ev.customerPhone||'';
+    description=ev.description||''; venueName=ev.venueName||''; venueAddress=ev.venueAddress||'';
+    guests=ev.guestCount||''; status=ev.status||'';
+  }
+  if (!name && !date) { alert('No event data to export.'); return; }
+  function fmtT(t){ if(!t)return ''; var p=t.split(':'); var h=+p[0],m=+p[1],ampm='AM'; if(h>=12){ampm='PM';if(h>12)h-=12;}if(h===0)h=12; return h+':'+(m<10?'0':'')+m+' '+ampm; }
+  function fmtD(d){ if(!d)return ''; var p=d.split('-'); return new Date(+p[0],+p[1]-1,+p[2]).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}); }
+  var phoneDisplay = custPhone ? formatPhone(custPhone) : '';
+  var timeDisplay = startTime ? fmtT(startTime) + (endTime ? ' – ' + fmtT(endTime) : '') : '';
+  var venueDisplay = [venueName, venueAddress].filter(Boolean).join(', ');
+  var logoHtml = ''; // placeholder for future logo
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Event Summary – '+safe(name)+'</title>'
+    +'<style>'
+    +'*{box-sizing:border-box;margin:0;padding:0;}'
+    +'body{font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#111;padding:36px 48px;}'
+    +'header{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:3px solid #1d4ed8;padding-bottom:16px;margin-bottom:22px;}'
+    +'header .brand{font-size:22px;font-weight:800;color:#1d4ed8;letter-spacing:-.03em;}'
+    +'header .brand .sub{font-size:11px;font-weight:500;color:#555;letter-spacing:0;display:block;margin-top:2px;}'
+    +'h2.event-title{font-size:19px;font-weight:800;color:#111;margin-bottom:16px;}'
+    +'.badge{display:inline-block;background:#1d4ed8;color:#fff;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:3px 8px;border-radius:4px;margin-bottom:14px;}'
+    +'.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 32px;margin-bottom:20px;}'
+    +'.field{display:flex;flex-direction:column;gap:3px;}'
+    +'.field label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#555;}'
+    +'.field .val{font-size:14px;font-weight:500;color:#111;}'
+    +'.desc-section{border-top:1px solid #ddd;padding-top:14px;}'
+    +'.desc-section label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#555;display:block;margin-bottom:6px;}'
+    +'.desc-section .body{font-size:13px;line-height:1.65;color:#222;white-space:pre-wrap;}'
+    +'footer{border-top:1px solid #ddd;margin-top:28px;padding-top:10px;font-size:10px;color:#888;display:flex;justify-content:space-between;}'
+    +'@page{margin:1.6cm 1.6cm;@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:10px;color:#888;font-family:system-ui,sans-serif;}}'
+    +'@media print{body{padding:0;}}'
+    +'</style></head><body>'
+    +'<header>'
+      +'<div class="brand">Legend Bartending<span class="sub">legendbartending.com</span></div>'
+      +'<div style="font-size:11px;color:#555;text-align:right;">Event Summary<br>Generated '+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'</div>'
+    +'</header>'
+    +(status?'<div class="badge">'+safe(status.toUpperCase())+'</div>':'')
+    +'<h2 class="event-title">'+safe(name)+'</h2>'
+    +'<div class="grid">'
+      +'<div class="field"><label>Date</label><div class="val">'+safe(fmtD(date)||'—')+'</div></div>'
+      +'<div class="field"><label>Time</label><div class="val">'+safe(timeDisplay||'—')+'</div></div>'
+      +'<div class="field"><label>Customer</label><div class="val">'+safe(custName||'—')+'</div></div>'
+      +'<div class="field"><label>Phone</label><div class="val">'+safe(phoneDisplay||custPhone||'—')+'</div></div>'
+      +(venueDisplay?'<div class="field" style="grid-column:1/-1;"><label>Venue</label><div class="val">'+safe(venueDisplay)+'</div></div>':'')
+      +(guests?'<div class="field"><label>Guests</label><div class="val">'+safe(guests)+'</div></div>':'')
+    +'</div>'
+    +(description?'<div class="desc-section"><label>Description / Notes</label><div class="body">'+safe(description)+'</div></div>':'')
+    +'<footer><span>Legend Bartending · Confidential</span><span>'+safe(name)+'</span></footer>'
+    +'</body></html>';
+  var w=window.open('','_blank','width=820,height=1000');
+  if(!w){alert('Please allow pop-ups to export PDF.');return;}
+  w.document.write(html);w.document.close();w.focus();
+  setTimeout(function(){w.print();},400);
+}
+document.getElementById('exportEventSummaryPdfBtn').addEventListener('click',function(){ exportEventSummaryPdf(); });
 function downloadWordContract(eventId){
   const event=(state.events||[]).find(e=>String(e.id||"")===String(eventId||""));if(!event)return alert("Event not found.");
   const fileName=`Legend_Bartending_Contract_${contractFileSafeName((customerMap()[event.customerId]||{}).name||event.eventName)}_${event.date||"event"}.doc`;

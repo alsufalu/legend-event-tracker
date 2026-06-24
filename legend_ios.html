@@ -857,11 +857,68 @@ function openEventDetail(id) {
 
   html += `<div class="btn-wrap">
     <button class="btn btn-primary" onclick="openEditEvent('${safe(id)}')">✏️ Edit Event</button>
+    <button class="btn btn-secondary" onclick="exportEventSummaryPdf('${safe(id)}')">📄 Export Summary PDF</button>
     <button class="btn btn-destructive" onclick="confirmDeleteEvent('${safe(id)}')">🗑 Delete Event</button>
   </div>`;
 
   openSheet(safe(ev.eventName||'Event'), html, '✕');
   loadEventAttachments(id);
+}
+
+// ─── Event Summary PDF Export ─────────────────────────────
+function exportEventSummaryPdf(id) {
+  const ev = (state.events||[]).find(e=>e.id===id);
+  if (!ev) return;
+  const cmap = customerMap();
+  const cust = cmap[ev.customerId]||{};
+  const custName = cust.name||ev.customerName||'';
+  const custPhone = cust.phone||ev.customerPhone||'';
+  function fmtT(t){ if(!t)return ''; const p=t.split(':'); let h=+p[0],m=+p[1],ap='AM'; if(h>=12){ap='PM';if(h>12)h-=12;}if(h===0)h=12; return h+':'+(m<10?'0':'')+m+' '+ap; }
+  function fmtD(d){ if(!d)return ''; const p=d.split('-'); return new Date(+p[0],+p[1]-1,+p[2]).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}); }
+  const timeDisplay = ev.startTime ? fmtT(ev.startTime)+(ev.endTime?' – '+fmtT(ev.endTime):'') : '';
+  const venueDisplay = [ev.venueName||ev.location, ev.venueAddress].filter(Boolean).join(', ');
+  const phoneDisplay = custPhone ? fmtPhone(custPhone) : '';
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Event Summary – ${safe(ev.eventName||'')}</title>`
+    +`<style>`
+    +`*{box-sizing:border-box;margin:0;padding:0;}`
+    +`body{font-family:-apple-system,system-ui,sans-serif;font-size:13px;color:#111;padding:36px 44px;}`
+    +`header{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:3px solid #1d4ed8;padding-bottom:16px;margin-bottom:22px;}`
+    +`header .brand{font-size:22px;font-weight:800;color:#1d4ed8;letter-spacing:-.03em;}`
+    +`header .brand .sub{font-size:11px;font-weight:500;color:#555;letter-spacing:0;display:block;margin-top:2px;}`
+    +`h2{font-size:19px;font-weight:800;color:#111;margin-bottom:14px;}`
+    +`.badge{display:inline-block;background:#1d4ed8;color:#fff;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:3px 8px;border-radius:4px;margin-bottom:12px;}`
+    +`.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 32px;margin-bottom:20px;}`
+    +`.field{display:flex;flex-direction:column;gap:3px;}`
+    +`.field label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#555;}`
+    +`.field .val{font-size:14px;font-weight:500;color:#111;}`
+    +`.desc{border-top:1px solid #ddd;padding-top:14px;}`
+    +`.desc label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#555;display:block;margin-bottom:6px;}`
+    +`.desc .body{font-size:13px;line-height:1.65;color:#222;white-space:pre-wrap;}`
+    +`footer{border-top:1px solid #ddd;margin-top:28px;padding-top:10px;font-size:10px;color:#888;display:flex;justify-content:space-between;}`
+    +`@page{margin:1.6cm 1.6cm;@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:10px;color:#888;font-family:-apple-system,sans-serif;}}`
+    +`@media print{body{padding:0;}}`
+    +`</style></head><body>`
+    +`<header><div class="brand">Legend Bartending<span class="sub">legendbartending.com</span></div>`
+    +`<div style="font-size:11px;color:#555;text-align:right;">Event Summary<br>Generated ${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div></header>`
+    +(ev.status?`<div class="badge">${safe((ev.status).toUpperCase())}</div>`:'')
+    +`<h2>${safe(ev.eventName||'Event')}</h2>`
+    +`<div class="grid">`
+      +`<div class="field"><label>Date</label><div class="val">${safe(fmtD(ev.date)||'—')}</div></div>`
+      +`<div class="field"><label>Time</label><div class="val">${safe(timeDisplay||'—')}</div></div>`
+      +`<div class="field"><label>Customer</label><div class="val">${safe(custName||'—')}</div></div>`
+      +`<div class="field"><label>Phone</label><div class="val">${safe(phoneDisplay||custPhone||'—')}</div></div>`
+      +(venueDisplay?`<div class="field" style="grid-column:1/-1;"><label>Venue</label><div class="val">${safe(venueDisplay)}</div></div>`:'')
+      +(ev.guestCount?`<div class="field"><label>Guests</label><div class="val">${safe(String(ev.guestCount))}</div></div>`:'')
+    +`</div>`
+    +(ev.description?`<div class="desc"><label>Description / Notes</label><div class="body">${safe(ev.description)}</div></div>`:'')
+    +`<footer><span>Legend Bartending · Confidential</span><span>${safe(ev.eventName||'')}</span></footer>`
+    +`</body></html>`;
+  // iOS: create blob URL for better print support
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, '_blank');
+  if (!w) { alert('Allow pop-ups to export PDF.'); return; }
+  setTimeout(()=>{ try{ w.print(); }catch(e){} }, 600);
 }
 
 // ─── Attachments (view + share, no upload) ────────────────
