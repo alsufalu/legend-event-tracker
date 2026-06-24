@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260624_073';
+  const BUILD='v20260624_074';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -6324,6 +6324,19 @@ renderAll();ensureEditableContractFields();
       if(typeEl        &&lead.service)     typeEl.value=lead.service;
       if(adCostEl      &&lead.leadCost)    adCostEl.value=lead.leadCost;
       if(contactDateEl &&lead.contactDate) contactDateEl.value=lead.contactDate;
+
+      /* Set event name to customer name */
+      var eventNameEl=document.getElementById('eName');
+      if(eventNameEl&&lead.name) eventNameEl.value=lead.name;
+
+      /* Clear quote & deposit — and zero setup hours so the contract
+         auto-calc doesn't produce a non-zero total on save             */
+      var quoteEl=document.getElementById('eQuote');
+      var depositReqEl=document.getElementById('eDepositRequired');
+      var setupHrsEl=document.getElementById('eContractBartenderSetupHours');
+      if(quoteEl)      quoteEl.value='';
+      if(depositReqEl) depositReqEl.value='';
+      if(setupHrsEl)   setupHrsEl.value='0';
 
       /* Set status from mapped Thumbtack status */
       if(statusEl&&lead.status){
