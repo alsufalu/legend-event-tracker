@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260623_071';
+  const BUILD='v20260624_073';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -925,6 +925,7 @@ tr:hover td { background:var(--surface2); }
               <div class="field-wrap"><label class="field-label" for="eStatus">Status</label><select id="eStatus"><option value="deciding">deciding</option><option value="booked">booked</option><option value="completed">completed</option><option value="lost">lost</option><option value="canceled">canceled/postponed</option></select></div>
               <div class="field-wrap"><label class="field-label" for="eEventType">Event type</label><input id="eEventType" type="text" placeholder="Dinner party, wedding, birthday, corporate event" autocomplete="off" tabindex="0"></div>
               <div class="field-wrap"><label class="field-label" for="eCreatedAt">Date entered</label><input id="eCreatedAt" type="date" title="Date this lead was entered into the system"></div>
+              <div class="field-wrap"><label class="field-label" for="eDateOfContact">Date of contact</label><input id="eDateOfContact" type="date" title="Date the customer first contacted you (e.g. Thumbtack request date)"></div>
             </div>
             <div class="row four">
               <div class="field-wrap"><label class="field-label" for="eDate">Event date</label><input id="eDate" type="date"></div>
@@ -2275,7 +2276,7 @@ function refreshStaffPayoutPreviews() {
 }
 function clearEventForm() {
   editingEventId = null;
-  ["eName","eNewCustomerName","eNewCustomerPhone","eEventType","eDate","eStartTime","eEndTime","eGuests","eVenueName","eVenueAddress","eBookingSite","eQuote","eDepositRequired","eDepositPaid","eCosts","eAdCost","eDepositDate","eDepositPaidBy","eFinalPaid","eFinalPaidDate","eFinalMethod","eContractSentDate","eLocation","eBalanceDue","eStaffOvertimeHours","eOvertimeNotes","eTravelFee","eContractDepositPercent","eContractBartenderCount","eContractBartenderRate","eContractBartenderSetupHours","eContractBarbackCount","eContractBarbackRate","eContractBarbackSetupHours","eContractGeneratedDate","eContractSignedDate","eContractFileName","eCustomContractTerms","eDescription","eUpdate","eFollowUpDate","eFollowUpType","eFollowUpStatus","eFollowUpCompletedDate","eFollowUpNotes"].forEach(id => document.getElementById(id).value = "");
+  ["eName","eNewCustomerName","eNewCustomerPhone","eEventType","eDate","eStartTime","eEndTime","eGuests","eVenueName","eVenueAddress","eBookingSite","eQuote","eDepositRequired","eDepositPaid","eCosts","eAdCost","eDepositDate","eDepositPaidBy","eFinalPaid","eFinalPaidDate","eFinalMethod","eContractSentDate","eLocation","eBalanceDue","eStaffOvertimeHours","eOvertimeNotes","eTravelFee","eContractDepositPercent","eContractBartenderCount","eContractBartenderRate","eContractBartenderSetupHours","eContractBarbackCount","eContractBarbackRate","eContractBarbackSetupHours","eContractGeneratedDate","eContractSignedDate","eContractFileName","eCustomContractTerms","eDescription","eUpdate","eFollowUpDate","eFollowUpType","eFollowUpStatus","eFollowUpCompletedDate","eFollowUpNotes","eDateOfContact"].forEach(id => { var el=document.getElementById(id); if(el) el.value=""; });
   document.getElementById("eCustomer").value = ""; document.getElementById("eStatus").value = "deciding";
   document.getElementById("eFollowUpStatus").value = "open"; document.getElementById("eBarSetup").value = "portable";
   document.getElementById("eContractDepositPercent").value = "30"; document.getElementById("eContractBartenderCount").value = "1";
@@ -2427,7 +2428,7 @@ function buildEventPayloadFromForm() {
   const balance = Math.max(0, quote - totalPaid);
   const bartenderAssignments = getCurrentAssignments();
   const customerId = resolveEventCustomerId();
-  return { id: editingEventId || nextEventId(), eventName: document.getElementById("eName").value.trim(), customerId, status: document.getElementById("eStatus").value, eventType: document.getElementById("eEventType").value.trim(), date: document.getElementById("eDate").value, startTime: document.getElementById("eStartTime").value, endTime: document.getElementById("eEndTime").value, guestCount: numeric(document.getElementById("eGuests").value), venueName: document.getElementById("eVenueName").value.trim(), venueAddress: document.getElementById("eVenueAddress").value.trim(), barSetup: document.getElementById("eBarSetup").value, existingBar: document.getElementById("eBarSetup").value === "existing", bookingSite: document.getElementById("eBookingSite").value.trim(), quotationAmount: quote, depositRequired: numeric(document.getElementById("eDepositRequired").value), depositAmountPaid: depositPaid, depositDatePaid: document.getElementById("eDepositDate").value, depositPaidBy: document.getElementById("eDepositPaidBy").value.trim(), finalAmountPaid: finalPaid, finalAmountPaidDate: document.getElementById("eFinalPaidDate").value, finalAmountPaymentMethod: document.getElementById("eFinalMethod").value.trim(), contractSentDate: document.getElementById("eContractSentDate").value, staffOvertimeHours: numeric(document.getElementById("eStaffOvertimeHours").value) || 0, billClientExtraTime: false, extraTimeRate: 0, extraTimeBilled: 0, overtimeNotes: document.getElementById("eOvertimeNotes").value.trim(), travelFee: numeric(document.getElementById("eTravelFee").value) || 0, contractDepositPercent: numeric(document.getElementById("eContractDepositPercent").value) ?? 30, contractBartenderCount: numeric(document.getElementById("eContractBartenderCount").value) || getCurrentAssignments().length || 1, contractBartenderRate: numeric(document.getElementById("eContractBartenderRate").value) ?? 70, contractBartenderSetupHours: numeric(document.getElementById("eContractBartenderSetupHours").value) ?? 1, contractBarbackCount: numeric(document.getElementById("eContractBarbackCount").value) || 0, contractBarbackRate: numeric(document.getElementById("eContractBarbackRate").value) ?? 25, contractBarbackSetupHours: numeric(document.getElementById("eContractBarbackSetupHours").value) ?? 1, contractGeneratedDate: document.getElementById("eContractGeneratedDate").value, contractSignedDate: document.getElementById("eContractSignedDate").value, contractFileName: document.getElementById("eContractFileName").value.trim(), customContractTerms: document.getElementById("eCustomContractTerms").value.trim(), location: document.getElementById("eLocation").value.trim(), description: document.getElementById("eDescription").value.trim(), latestUpdate: document.getElementById("eUpdate").value.trim(), followUpDate: document.getElementById("eFollowUpDate").value, followUpType: document.getElementById("eFollowUpType").value, followUpStatus: document.getElementById("eFollowUpStatus").value || "open", followUpCompletedDate: document.getElementById("eFollowUpCompletedDate").value, followUpNotes: document.getElementById("eFollowUpNotes").value.trim(), totalAmountPaid: totalPaid, balanceDue: balance, eventCosts: numeric(document.getElementById("eCosts").value) || 0, advertisingCost: numeric(document.getElementById("eAdCost").value) || 0, bartenderAssignments };
+  return { id: editingEventId || nextEventId(), eventName: document.getElementById("eName").value.trim(), customerId, status: document.getElementById("eStatus").value, eventType: document.getElementById("eEventType").value.trim(), date: document.getElementById("eDate").value, startTime: document.getElementById("eStartTime").value, endTime: document.getElementById("eEndTime").value, guestCount: numeric(document.getElementById("eGuests").value), venueName: document.getElementById("eVenueName").value.trim(), venueAddress: document.getElementById("eVenueAddress").value.trim(), barSetup: document.getElementById("eBarSetup").value, existingBar: document.getElementById("eBarSetup").value === "existing", bookingSite: document.getElementById("eBookingSite").value.trim(), quotationAmount: quote, depositRequired: numeric(document.getElementById("eDepositRequired").value), depositAmountPaid: depositPaid, depositDatePaid: document.getElementById("eDepositDate").value, depositPaidBy: document.getElementById("eDepositPaidBy").value.trim(), finalAmountPaid: finalPaid, finalAmountPaidDate: document.getElementById("eFinalPaidDate").value, finalAmountPaymentMethod: document.getElementById("eFinalMethod").value.trim(), contractSentDate: document.getElementById("eContractSentDate").value, staffOvertimeHours: numeric(document.getElementById("eStaffOvertimeHours").value) || 0, billClientExtraTime: false, extraTimeRate: 0, extraTimeBilled: 0, overtimeNotes: document.getElementById("eOvertimeNotes").value.trim(), travelFee: numeric(document.getElementById("eTravelFee").value) || 0, contractDepositPercent: numeric(document.getElementById("eContractDepositPercent").value) ?? 30, contractBartenderCount: numeric(document.getElementById("eContractBartenderCount").value) || getCurrentAssignments().length || 1, contractBartenderRate: numeric(document.getElementById("eContractBartenderRate").value) ?? 70, contractBartenderSetupHours: numeric(document.getElementById("eContractBartenderSetupHours").value) ?? 1, contractBarbackCount: numeric(document.getElementById("eContractBarbackCount").value) || 0, contractBarbackRate: numeric(document.getElementById("eContractBarbackRate").value) ?? 25, contractBarbackSetupHours: numeric(document.getElementById("eContractBarbackSetupHours").value) ?? 1, contractGeneratedDate: document.getElementById("eContractGeneratedDate").value, contractSignedDate: document.getElementById("eContractSignedDate").value, contractFileName: document.getElementById("eContractFileName").value.trim(), customContractTerms: document.getElementById("eCustomContractTerms").value.trim(), location: document.getElementById("eLocation").value.trim(), description: document.getElementById("eDescription").value.trim(), latestUpdate: document.getElementById("eUpdate").value.trim(), followUpDate: document.getElementById("eFollowUpDate").value, followUpType: document.getElementById("eFollowUpType").value, followUpStatus: document.getElementById("eFollowUpStatus").value || "open", followUpCompletedDate: document.getElementById("eFollowUpCompletedDate").value, followUpNotes: document.getElementById("eFollowUpNotes").value.trim(), totalAmountPaid: totalPaid, balanceDue: balance, eventCosts: numeric(document.getElementById("eCosts").value) || 0, advertisingCost: numeric(document.getElementById("eAdCost").value) || 0, dateOfContact: document.getElementById("eDateOfContact").value || "", bartenderAssignments };
 }
 function saveEventPayloadFromForm(options = {}) {
   const payload = buildEventPayloadFromForm();
@@ -2507,6 +2508,7 @@ window.editEvent = function(id) {
   document.getElementById("eContractGeneratedDate").value=e.contractGeneratedDate||""; document.getElementById("eContractSignedDate").value=e.contractSignedDate||"";
   document.getElementById("eContractFileName").value=e.contractFileName||""; document.getElementById("eCustomContractTerms").value=e.customContractTerms||"";
   document.getElementById("eLocation").value=e.location||""; document.getElementById("eDescription").value=e.description||""; document.getElementById("eUpdate").value=e.latestUpdate||"";
+  var docEl=document.getElementById("eDateOfContact"); if(docEl) docEl.value=e.dateOfContact||"";
   document.getElementById("eFollowUpDate").value=e.followUpDate||""; document.getElementById("eFollowUpType").value=e.followUpType||"";
   document.getElementById("eFollowUpStatus").value=e.followUpStatus||"open"; document.getElementById("eFollowUpCompletedDate").value=e.followUpCompletedDate||"";
   document.getElementById("eFollowUpNotes").value=e.followUpNotes||"";
@@ -6134,6 +6136,8 @@ renderAll();ensureEditableContractFields();
     var nameIdx       =findColIdx(headers,['name','customer name','contact name','client name','full name','first name']);
     var statusIdx     =findColIdx(headers,['status','lead status','opportunity status']);
     var chargeStateIdx=findColIdx(headers,['charge state','charge_state','chargestate','charge status','payment state']);
+    var leadCostIdx   =findColIdx(headers,['lead price','lead cost','charge amount','amount charged','credit cost','cost','charge','lead charge','price paid','amount paid']);
+    var contactDateIdx=findColIdx(headers,['request date','contact date','date of contact','date received','date submitted','submitted date','created date','created','date','lead date','request']);
 
     if(phoneIdx<0){
       for(var c=0;c<headers.length;c++){
@@ -6187,6 +6191,8 @@ renderAll();ensureEditableContractFields();
           phone:raw,
           ttStatus:statusIdx>=0?(row[statusIdx]||'').trim():'',
           mappedStatus:mapStatus(statusIdx>=0?row[statusIdx]:''),
+          leadCost:leadCostIdx>=0?(row[leadCostIdx]||'').trim():'',
+          contactDate:contactDateIdx>=0?(row[contactDateIdx]||'').trim():'',
           allFields:allFields
         });
       }
@@ -6252,9 +6258,15 @@ renderAll();ensureEditableContractFields();
           }
         });
         html+='<td style="'+tdStyle+'"><span style="background:'+statusBadgeColor+';color:#fff;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">'+safe(r.mappedStatus)+'</span></td>';
-        var leadData=JSON.stringify({name:r.name,phone:r.phone,service:r.allFields['Service']||r.allFields['Request']||'',date:r.allFields['Date']||r.allFields['Request Date']||'',status:r.mappedStatus});
+        /* Store lead as JSON in a data attribute — avoids quote-escaping issues with inline onclick */
+        /* Parse contact date into YYYY-MM-DD for date input */
+        var parsedContactDate='';
+        if(r.contactDate){try{var d=new Date(r.contactDate);if(!isNaN(d))parsedContactDate=d.toISOString().slice(0,10);}catch(ex){}}
+        /* Strip currency symbols from lead cost so it's a plain number */
+        var leadCostNum=(r.leadCost||'').replace(/[^0-9.]/g,'');
+        var leadData=JSON.stringify({name:r.name,phone:r.phone,service:r.allFields['Service']||r.allFields['Request']||'',status:r.mappedStatus,leadCost:leadCostNum,contactDate:parsedContactDate});
         html+='<td style="padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap;">'
-          +'<button type="button" onclick="prefillNewEventFromLead('+leadData.replace(/'/g,'&#39;')+');if(typeof switchTab===\'function\')switchTab(\'events\');" '
+          +'<button type="button" class="tt-add-lead-btn" data-lead=\''+leadData.replace(/'/g,'&#39;')+'\' '
           +'style="font-size:12px;padding:4px 10px;background:var(--blue);color:#fff;border:none;border-radius:5px;cursor:pointer;">+ Add to Events</button></td>';
         html+='</tr>';
       });
@@ -6275,12 +6287,24 @@ renderAll();ensureEditableContractFields();
   }
 
   document.addEventListener('click',function(e){
+    /* Run comparison */
     if(e.target&&e.target.id==='ttRunCompareBtn'){
       var inp=document.getElementById('ttCsvFileInput');
       if(!inp||!inp.files||!inp.files[0]){alert('Please choose a CSV file first.');return;}
       var reader=new FileReader();
       reader.onload=function(ev){runThumbCompare(ev.target.result);};
       reader.readAsText(inp.files[0]);
+      return;
+    }
+    /* Add-to-Events button — data stored in data-lead attribute to avoid quote issues */
+    var addBtn=e.target.closest&&e.target.closest('.tt-add-lead-btn');
+    if(addBtn){
+      var raw=addBtn.getAttribute('data-lead');
+      if(!raw)return;
+      var lead;
+      try{lead=JSON.parse(raw);}catch(ex){alert('Could not read lead data.');return;}
+      if(typeof window.prefillNewEventFromLead==='function') window.prefillNewEventFromLead(lead);
+      if(typeof switchTab==='function') switchTab('events');
     }
   });
 
@@ -6288,13 +6312,19 @@ renderAll();ensureEditableContractFields();
   window.prefillNewEventFromLead=function(lead){
     if(typeof clearEventForm==='function')clearEventForm();
     setTimeout(function(){
-      var nameEl   =document.getElementById('eNewCustomerName');
-      var phoneEl  =document.getElementById('eNewCustomerPhone');
-      var typeEl   =document.getElementById('eEventType');
-      var statusEl =document.getElementById('eStatus');
-      if(nameEl  &&lead.name)   nameEl.value=lead.name;
-      if(phoneEl &&lead.phone)  phoneEl.value=lead.phone;
-      if(typeEl  &&lead.service)typeEl.value=lead.service;
+      var nameEl        =document.getElementById('eNewCustomerName');
+      var phoneEl       =document.getElementById('eNewCustomerPhone');
+      var typeEl        =document.getElementById('eEventType');
+      var statusEl      =document.getElementById('eStatus');
+      var adCostEl      =document.getElementById('eAdCost');
+      var contactDateEl =document.getElementById('eDateOfContact');
+
+      if(nameEl        &&lead.name)        nameEl.value=lead.name;
+      if(phoneEl       &&lead.phone)       phoneEl.value=lead.phone;
+      if(typeEl        &&lead.service)     typeEl.value=lead.service;
+      if(adCostEl      &&lead.leadCost)    adCostEl.value=lead.leadCost;
+      if(contactDateEl &&lead.contactDate) contactDateEl.value=lead.contactDate;
+
       /* Set status from mapped Thumbtack status */
       if(statusEl&&lead.status){
         var opt=Array.from(statusEl.options).find(function(o){return o.value===lead.status;});
