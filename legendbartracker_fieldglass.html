@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260624_078';
+  const BUILD='v20260624_079';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -6256,63 +6256,106 @@ renderAll();ensureEditableContractFields();
       +'</div>':'')
       +'</div>';
 
+    /* ── Ignore list helpers ── */
+    var TT_IGNORE_KEY=STORAGE_KEY+'_tt_ignored';
+    function getTtIgnored(){try{return JSON.parse(localStorage.getItem(TT_IGNORE_KEY)||'[]');}catch(e){return[];}}
+    function saveTtIgnored(arr){localStorage.setItem(TT_IGNORE_KEY,JSON.stringify(arr));}
+    function addTtIgnored(name){var list=getTtIgnored();var nn=normName(name);if(!list.some(function(x){return normName(x)===nn;})){list.push(name);saveTtIgnored(list);}}
+
+    var allHeaders=headers.map(function(h){return h.trim();});
+    window._ttMissingLeads=missing;
+    window._ttAllHeaders=allHeaders;
+    window._ttSortCol=-1;   /* -1 = unsorted; ≥0 = allHeaders index; allHeaders.length = Suggested Status */
+    window._ttSortDir='asc';
+
+    function buildTtTableHtml(){
+      var ignoredSet={};
+      getTtIgnored().forEach(function(n){ignoredSet[normName(n)]=true;});
+      var rows=(window._ttMissingLeads||[]).filter(function(r){return !ignoredSet[normName(r.name)];});
+      var sortCol=window._ttSortCol; var sortDir=window._ttSortDir;
+
+      /* Sort */
+      if(sortCol>=0){
+        rows=rows.slice().sort(function(a,b){
+          var isStatus=sortCol===allHeaders.length;
+          var av=isStatus?(a.mappedStatus||''):(a.allFields[allHeaders[sortCol]]||'');
+          var bv=isStatus?(b.mappedStatus||''):(b.allFields[allHeaders[sortCol]]||'');
+          av=av.toLowerCase();bv=bv.toLowerCase();
+          return sortDir==='asc'?av.localeCompare(bv):bv.localeCompare(av);
+        });
+      }
+
+      var ignoredTotal=getTtIgnored().length;
+      var tdStyle='padding:7px 10px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);white-space:nowrap;';
+      var thStyle='padding:8px 10px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);white-space:nowrap;background:var(--surface2);cursor:pointer;user-select:none;';
+
+      var h='<div id="ttTableWrap">';
+      h+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;">';
+      h+='<div style="font-weight:700;font-size:14px;color:#dc2626;">⚠️ '+rows.length+' lead'+(rows.length===1?'':'s')+' not found in your database'
+        +(ignoredTotal?' <span style="font-size:12px;color:var(--ink3);font-weight:400;">('+ignoredTotal+' ignored — <button type="button" id="ttClearIgnoredBtn" style="font-size:11px;padding:1px 6px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:var(--surface2);">clear</button>)</span>':'')+':</div>';
+      h+='<button type="button" id="ttExportMissingBtn" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:6px;cursor:pointer;background:var(--surface2);white-space:nowrap;">⬇ Export CSV</button>';
+      h+='</div>';
+
+      if(!rows.length){
+        h+='<div style="color:#16a34a;font-weight:600;font-size:14px;padding:12px 0;">✅ All remaining leads are already in your database or ignored!</div>';
+        h+='</div>';
+        return h;
+      }
+
+      h+='<div style="overflow:auto;max-height:520px;border:1px solid var(--border);border-radius:8px;">';
+      h+='<table style="border-collapse:collapse;font-size:12px;">';
+      h+='<thead><tr style="text-align:left;position:sticky;top:0;z-index:2;box-shadow:0 1px 0 var(--border);">';
+      allHeaders.forEach(function(colH,ci){
+        var arrow=sortCol===ci?(sortDir==='asc'?' ↑':' ↓'):'';
+        h+='<th class="tt-sort-th" data-tt-col="'+ci+'" style="'+thStyle+'">'+safe(colH)+arrow+'</th>';
+      });
+      var statusArrow=sortCol===allHeaders.length?(sortDir==='asc'?' ↑':' ↓'):'';
+      h+='<th class="tt-sort-th" data-tt-col="'+allHeaders.length+'" style="'+thStyle+'">Suggested Status'+statusArrow+'</th>';
+      h+='<th style="'+thStyle.replace('cursor:pointer;','')+'"></th>';
+      h+='</tr></thead><tbody>';
+
+      rows.forEach(function(r,i){
+        var bg=i%2===0?'var(--surface)':'var(--surface2)';
+        var statusBadgeColor=r.mappedStatus==='lost'?'#dc2626':r.mappedStatus==='deciding'?'#d97706':'#2563eb';
+        h+='<tr style="background:'+bg+';">';
+        allHeaders.forEach(function(colH){
+          var val=r.allFields[colH]||'';
+          if(normPhone(val).length>=7){
+            h+='<td style="'+tdStyle+'"><a href="tel:'+normPhone(val)+'" style="color:var(--blue);">'+safe(val)+'</a></td>';
+          } else {
+            h+='<td style="'+tdStyle+'">'+safe(val||'—')+'</td>';
+          }
+        });
+        h+='<td style="'+tdStyle+'"><span style="background:'+statusBadgeColor+';color:#fff;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">'+safe(r.mappedStatus)+'</span></td>';
+        var parsedContactDate='';
+        if(r.contactDate){try{var d=new Date(r.contactDate);if(!isNaN(d))parsedContactDate=d.toISOString().slice(0,10);}catch(ex){}}
+        var leadCostNum=(r.leadCost||'').replace(/[^0-9.]/g,'');
+        var leadData=JSON.stringify({name:r.name,phone:r.phone,service:r.allFields['Service']||r.allFields['Request']||'',status:r.mappedStatus,leadCost:leadCostNum,contactDate:parsedContactDate});
+        var ignoreName=r.name.replace(/'/g,'&#39;');
+        h+='<td style="padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap;display:flex;gap:6px;align-items:center;">'
+          +'<button type="button" class="tt-add-lead-btn" data-lead=\''+leadData.replace(/'/g,'&#39;')+'\' '
+          +'style="font-size:12px;padding:4px 10px;background:var(--blue);color:#fff;border:none;border-radius:5px;cursor:pointer;">+ Add to Events</button>'
+          +'<button type="button" class="tt-ignore-lead-btn" data-ignore-name=\''+ignoreName+'\' '
+          +'style="font-size:12px;padding:4px 10px;background:var(--surface2);color:var(--ink2);border:1px solid var(--border);border-radius:5px;cursor:pointer;" title="Never show this lead again">🚫 Ignore</button>'
+          +'</td>';
+        h+='</tr>';
+      });
+      h+='</tbody></table></div></div>';
+      return h;
+    }
+
     if(missing.length===0){
       html+='<div style="color:#16a34a;font-weight:600;font-size:14px;">✅ All leads are already in your database!</div>';
     } else {
-      /* All column headers from CSV for the full table */
-      var allHeaders=headers.map(function(h){return h.trim();});
-
-      html+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">'
-        +'<div style="font-weight:700;font-size:14px;color:#dc2626;">⚠️ '+missing.length+' lead'+(missing.length===1?'':'s')+' not found in your database:</div>';
-      window._ttMissingLeads=missing;
-      html+='<button type="button" id="ttExportMissingBtn" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:6px;cursor:pointer;background:var(--surface2);white-space:nowrap;">⬇ Export missing as CSV</button>'
-        +'</div>';
-
-      var tdStyle='padding:7px 10px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);white-space:nowrap;';
-      var thStyle='padding:8px 10px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);white-space:nowrap;background:var(--surface2);';
-
-      html+='<div style="overflow:auto;max-height:520px;border:1px solid var(--border);border-radius:8px;">';
-      html+='<table style="border-collapse:collapse;font-size:12px;">';
-      /* Sticky header row — all CSV columns + mapped status + action */
-      html+='<thead><tr style="text-align:left;position:sticky;top:0;z-index:2;box-shadow:0 1px 0 var(--border);">';
-      allHeaders.forEach(function(h){ html+='<th style="'+thStyle+'">'+safe(h)+'</th>'; });
-      html+='<th style="'+thStyle+'">Suggested Status</th>';
-      html+='<th style="'+thStyle+'"></th>';
-      html+='</tr></thead><tbody>';
-
-      missing.forEach(function(r,i){
-        var bg=i%2===0?'var(--surface)':'var(--surface2)';
-        var telRaw=r.phone.replace(/\D/g,'');
-        var statusBadgeColor=r.mappedStatus==='lost'?'#dc2626':r.mappedStatus==='deciding'?'#d97706':'#2563eb';
-        html+='<tr style="background:'+bg+';">';
-        allHeaders.forEach(function(h){
-          var val=r.allFields[h]||'';
-          /* Make phone clickable */
-          if(normPhone(val).length>=7){
-            html+='<td style="'+tdStyle+'"><a href="tel:'+normPhone(val)+'" style="color:var(--blue);">'+safe(val)+'</a></td>';
-          } else {
-            html+='<td style="'+tdStyle+'">'+safe(val||'—')+'</td>';
-          }
-        });
-        html+='<td style="'+tdStyle+'"><span style="background:'+statusBadgeColor+';color:#fff;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">'+safe(r.mappedStatus)+'</span></td>';
-        /* Store lead as JSON in a data attribute — avoids quote-escaping issues with inline onclick */
-        /* Parse contact date into YYYY-MM-DD for date input */
-        var parsedContactDate='';
-        if(r.contactDate){try{var d=new Date(r.contactDate);if(!isNaN(d))parsedContactDate=d.toISOString().slice(0,10);}catch(ex){}}
-        /* Strip currency symbols from lead cost so it's a plain number */
-        var leadCostNum=(r.leadCost||'').replace(/[^0-9.]/g,'');
-        var leadData=JSON.stringify({name:r.name,phone:r.phone,service:r.allFields['Service']||r.allFields['Request']||'',status:r.mappedStatus,leadCost:leadCostNum,contactDate:parsedContactDate});
-        html+='<td style="padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap;">'
-          +'<button type="button" class="tt-add-lead-btn" data-lead=\''+leadData.replace(/'/g,'&#39;')+'\' '
-          +'style="font-size:12px;padding:4px 10px;background:var(--blue);color:#fff;border:none;border-radius:5px;cursor:pointer;">+ Add to Events</button></td>';
-        html+='</tr>';
-      });
-      html+='</tbody></table></div>';
+      html+=buildTtTableHtml();
     }
     res.innerHTML=html;
+    window._ttBuildTableHtml=buildTtTableHtml;
+
+    /* Wire export button */
     var expBtn=document.getElementById('ttExportMissingBtn');
     if(expBtn)expBtn.addEventListener('click',function(){
-      var rows=window._ttMissingLeads||[];
+      var rows=(window._ttMissingLeads||[]);
       if(!rows.length)return;
       var allH=Object.keys(rows[0].allFields||{});
       var csvHeaders=allH.concat(['Suggested Status']);
@@ -6342,6 +6385,41 @@ renderAll();ensureEditableContractFields();
       try{lead=JSON.parse(raw);}catch(ex){alert('Could not read lead data.');return;}
       if(typeof window.prefillNewEventFromLead==='function') window.prefillNewEventFromLead(lead);
       if(typeof switchTab==='function') switchTab('events');
+    }
+    /* Ignore button — persist name to localStorage and refresh table */
+    var ignoreBtn=e.target.closest&&e.target.closest('.tt-ignore-lead-btn');
+    if(ignoreBtn){
+      var ignoreName=ignoreBtn.getAttribute('data-ignore-name');
+      if(!ignoreName)return;
+      var TT_KEY=(typeof STORAGE_KEY!=='undefined'?STORAGE_KEY:'mobile_bar_tracker_fieldglass')+'_tt_ignored';
+      try{
+        var cur=JSON.parse(localStorage.getItem(TT_KEY)||'[]');
+        var nn=(ignoreName||'').toLowerCase().trim().replace(/\s+/g,' ');
+        if(!cur.some(function(x){return x.toLowerCase().trim().replace(/\s+/g,' ')===nn;})){
+          cur.push(ignoreName);localStorage.setItem(TT_KEY,JSON.stringify(cur));
+        }
+      }catch(ex){}
+      var wrap=document.getElementById('ttTableWrap');
+      if(wrap&&typeof window._ttBuildTableHtml==='function'){wrap.outerHTML=window._ttBuildTableHtml();}
+      return;
+    }
+    /* Sort header click */
+    var sortTh=e.target.closest&&e.target.closest('.tt-sort-th');
+    if(sortTh){
+      var col=parseInt(sortTh.getAttribute('data-tt-col'),10);
+      if(window._ttSortCol===col){window._ttSortDir=window._ttSortDir==='asc'?'desc':'asc';}
+      else{window._ttSortCol=col;window._ttSortDir='asc';}
+      var wrap2=document.getElementById('ttTableWrap');
+      if(wrap2&&typeof window._ttBuildTableHtml==='function'){wrap2.outerHTML=window._ttBuildTableHtml();}
+      return;
+    }
+    /* Clear all ignored leads */
+    if(e.target&&e.target.id==='ttClearIgnoredBtn'){
+      var TT_KEY2=(typeof STORAGE_KEY!=='undefined'?STORAGE_KEY:'mobile_bar_tracker_fieldglass')+'_tt_ignored';
+      localStorage.removeItem(TT_KEY2);
+      var wrap3=document.getElementById('ttTableWrap');
+      if(wrap3&&typeof window._ttBuildTableHtml==='function'){wrap3.outerHTML=window._ttBuildTableHtml();}
+      return;
     }
   });
 
