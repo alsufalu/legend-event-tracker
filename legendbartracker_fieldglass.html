@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260620_068';
+  const BUILD='v20260621_069';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1132,6 +1132,10 @@ tr:hover td { background:var(--surface2); }
           <div class="report-card" data-report="staffEvents" style="border:1px solid var(--border);border-radius:10px;padding:16px 18px;cursor:pointer;background:var(--surface2);transition:border-color .15s;">
             <div style="font-size:15px;font-weight:700;margin-bottom:4px;">📋 Staff Events Report</div>
             <div class="small" style="color:var(--ink3);">All staff event assignments with pay details, filterable by staff member.</div>
+          </div>
+          <div class="report-card" data-report="thumbtackCompare" style="border:1px solid var(--border);border-radius:10px;padding:16px 18px;cursor:pointer;background:var(--surface2);transition:border-color .15s;">
+            <div style="font-size:15px;font-weight:700;margin-bottom:4px;">🔍 Thumbtack Lead Comparison</div>
+            <div class="small" style="color:var(--ink3);">Upload a Thumbtack CSV export and see which leads are not yet in your events database.</div>
           </div>
         </div>
 
@@ -6053,7 +6057,215 @@ renderAll();ensureEditableContractFields();
           return [headers].concat(data).map(function(r){ return r.map(rCsvEsc).join(','); }).join('\n');
         }catch(err){ return ''; }
       }
+    },
+
+    thumbtackCompare:{
+      title:'Thumbtack Lead Comparison',
+      run:function(){
+        return '<div style="max-width:700px;">'
+          +'<p style="margin-bottom:14px;font-size:13px;color:var(--ink2);">Upload your Thumbtack leads CSV export. The tool will compare phone numbers against your events database and flag any leads not yet entered.</p>'
+          +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap;">'
+          +'<label style="font-size:13px;font-weight:600;">Thumbtack CSV file:</label>'
+          +'<input type="file" id="ttCsvFileInput" accept=".csv,text/csv" style="font-size:13px;">'
+          +'<button type="button" id="ttRunCompareBtn" class="primary" style="font-size:13px;padding:6px 14px;">Compare</button>'
+          +'</div>'
+          +'<div id="ttCompareResults"></div>'
+          +'</div>';
+      }
     }
+  };
+
+  /* ── Thumbtack Compare logic (wired after DOM is ready) ── */
+  function normPhone(p){return String(p||'').replace(/\D/g,'').slice(-10);}
+
+  function parseCsv(text){
+    /* Simple RFC-4180-ish parser: handles quoted fields with embedded commas/newlines */
+    var rows=[]; var row=[]; var field=''; var inQ=false;
+    for(var i=0;i<text.length;i++){
+      var c=text[i];
+      if(inQ){
+        if(c==='"'&&text[i+1]==='"'){field+='"';i++;}
+        else if(c==='"'){inQ=false;}
+        else{field+=c;}
+      } else {
+        if(c==='"'){inQ=true;}
+        else if(c===','){row.push(field);field='';}
+        else if(c==='\n'||(c==='\r'&&text[i+1]==='\n')){
+          if(c==='\r')i++;
+          row.push(field);field='';
+          if(row.some(function(f){return f.trim()!=='';}))rows.push(row);
+          row=[];
+        } else if(c==='\r'){
+          row.push(field);field='';
+          if(row.some(function(f){return f.trim()!=='';}))rows.push(row);
+          row=[];
+        } else{field+=c;}
+      }
+    }
+    if(field||row.length){row.push(field);if(row.some(function(f){return f.trim()!=='';}))rows.push(row);}
+    return rows;
+  }
+
+  function findColIdx(headers, candidates){
+    var h=headers.map(function(x){return x.toLowerCase().trim();});
+    for(var i=0;i<candidates.length;i++){
+      var idx=h.indexOf(candidates[i].toLowerCase());
+      if(idx>=0)return idx;
+    }
+    /* Partial match fallback */
+    for(var i=0;i<candidates.length;i++){
+      for(var j=0;j<h.length;j++){
+        if(h[j].indexOf(candidates[i].toLowerCase())>=0)return j;
+      }
+    }
+    return -1;
+  }
+
+  function runThumbCompare(text){
+    var res=document.getElementById('ttCompareResults');
+    if(!res)return;
+    var rows=parseCsv(text);
+    if(rows.length<2){res.innerHTML='<div style="color:#dc2626;">Could not parse CSV — make sure it has a header row.</div>';return;}
+    var headers=rows[0];
+    var dataRows=rows.slice(1);
+
+    /* Find relevant columns */
+    var phoneIdx=findColIdx(headers,['phone','phone number','mobile','cell','customer phone','contact phone']);
+    var nameIdx=findColIdx(headers,['name','customer name','contact name','client name','full name','first name']);
+    var serviceIdx=findColIdx(headers,['service','request','job','category','type','service type','request type']);
+    var dateIdx=findColIdx(headers,['date','request date','created','submitted','lead date','date received']);
+    var statusIdx=findColIdx(headers,['status','lead status','opportunity status']);
+    var budgetIdx=findColIdx(headers,['budget','price','amount','quote']);
+
+    if(phoneIdx<0){
+      /* Try to auto-detect by value pattern */
+      for(var c=0;c<headers.length;c++){
+        var sample=(dataRows[0]||[])[c]||'';
+        if(normPhone(sample).length===10){phoneIdx=c;break;}
+      }
+    }
+    if(phoneIdx<0){res.innerHTML='<div style="color:#dc2626;">Could not find a phone number column in your CSV. Columns found: <strong>'+headers.map(function(h){return safe(h);}).join(', ')+'</strong></div>';return;}
+
+    /* Build set of all normalized phones from events database */
+    var dbPhones={};
+    var cmap=customerMap();
+    (state.events||[]).filter(function(e){return !e.deleted;}).forEach(function(ev){
+      var cust=cmap[ev.customerId]||{};
+      var phones=[cust.phone,ev.customerPhone,ev.phone].filter(Boolean);
+      phones.forEach(function(p){
+        var n=normPhone(p);
+        if(n.length>=7) dbPhones[n]=true;
+      });
+    });
+    /* Also check customers table directly */
+    (state.customers||[]).forEach(function(c){
+      var n=normPhone(c.phone);
+      if(n.length>=7) dbPhones[n]=true;
+    });
+
+    /* Compare */
+    var missing=[]; var found=0; var skipped=0;
+    dataRows.forEach(function(row){
+      var raw=(row[phoneIdx]||'').trim();
+      if(!raw){skipped++;return;}
+      var norm=normPhone(raw);
+      if(norm.length<7){skipped++;return;}
+      var inDb=!!(dbPhones[norm]||dbPhones[norm.slice(-7)]||dbPhones[norm.slice(-10)]);
+      if(inDb){found++;}
+      else{
+        missing.push({
+          name:nameIdx>=0?(row[nameIdx]||'').trim():'',
+          phone:raw,
+          service:serviceIdx>=0?(row[serviceIdx]||'').trim():'',
+          date:dateIdx>=0?(row[dateIdx]||'').trim():'',
+          status:statusIdx>=0?(row[statusIdx]||'').trim():'',
+          budget:budgetIdx>=0?(row[budgetIdx]||'').trim():''
+        });
+      }
+    });
+
+    /* Summary */
+    var totalLeads=dataRows.length-skipped;
+    var html='<div style="display:flex;gap:24px;margin-bottom:18px;flex-wrap:wrap;">'
+      +'<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 20px;text-align:center;">'
+        +'<div style="font-size:22px;font-weight:800;color:#16a34a;">'+found+'</div>'
+        +'<div style="font-size:12px;color:#166534;font-weight:600;">Already in database</div>'
+      +'</div>'
+      +'<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 20px;text-align:center;">'
+        +'<div style="font-size:22px;font-weight:800;color:#dc2626;">'+missing.length+'</div>'
+        +'<div style="font-size:12px;color:#991b1b;font-weight:600;">NOT in database</div>'
+      +'</div>'
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 20px;text-align:center;">'
+        +'<div style="font-size:22px;font-weight:800;color:var(--ink1);">'+totalLeads+'</div>'
+        +'<div style="font-size:12px;color:var(--ink3);font-weight:600;">Total leads checked</div>'
+      +'</div>'
+      +'</div>';
+
+    if(missing.length===0){
+      html+='<div style="color:#16a34a;font-weight:600;font-size:14px;">✅ All leads are already in your database!</div>';
+    } else {
+      html+='<div style="font-weight:700;font-size:14px;margin-bottom:10px;color:#dc2626;">⚠️ '+missing.length+' lead'+(missing.length===1?'':'s')+' not found in your database:</div>';
+      html+='<div style="overflow-x:auto;">';
+      html+='<table style="border-collapse:collapse;width:100%;font-size:13px;">';
+      html+='<thead><tr style="background:var(--surface2);text-align:left;">'
+        +'<th style="padding:8px 10px;border:1px solid var(--border);">Name</th>'
+        +'<th style="padding:8px 10px;border:1px solid var(--border);">Phone</th>'
+        +(serviceIdx>=0?'<th style="padding:8px 10px;border:1px solid var(--border);">Service / Request</th>':'')
+        +(dateIdx>=0?'<th style="padding:8px 10px;border:1px solid var(--border);">Lead Date</th>':'')
+        +(statusIdx>=0?'<th style="padding:8px 10px;border:1px solid var(--border);">Status</th>':'')
+        +(budgetIdx>=0?'<th style="padding:8px 10px;border:1px solid var(--border);">Budget</th>':'')
+        +'<th style="padding:8px 10px;border:1px solid var(--border);"></th>'
+        +'</tr></thead><tbody>';
+      missing.forEach(function(r){
+        var telHref='tel:'+r.phone.replace(/\D/g,'');
+        html+='<tr>'
+          +'<td style="padding:8px 10px;border:1px solid var(--border);font-weight:600;">'+safe(r.name||'—')+'</td>'
+          +'<td style="padding:8px 10px;border:1px solid var(--border);"><a href="'+telHref+'" style="color:var(--blue);">'+safe(r.phone)+'</a></td>'
+          +(serviceIdx>=0?'<td style="padding:8px 10px;border:1px solid var(--border);">'+safe(r.service||'—')+'</td>':'')
+          +(dateIdx>=0?'<td style="padding:8px 10px;border:1px solid var(--border);">'+safe(r.date||'—')+'</td>':'')
+          +(statusIdx>=0?'<td style="padding:8px 10px;border:1px solid var(--border);">'+safe(r.status||'—')+'</td>':'')
+          +(budgetIdx>=0?'<td style="padding:8px 10px;border:1px solid var(--border);">'+safe(r.budget||'—')+'</td>':'')
+          +'<td style="padding:8px 10px;border:1px solid var(--border);"><button type="button" onclick="prefillNewEventFromLead('+JSON.stringify({name:r.name,phone:r.phone,service:r.service,date:r.date})+');if(typeof switchTab===\'function\')switchTab(\'events\');" style="font-size:12px;padding:4px 10px;background:var(--blue);color:#fff;border:none;border-radius:5px;cursor:pointer;">+ Add to Events</button></td>'
+          +'</tr>';
+      });
+      html+='</tbody></table></div>';
+      /* CSV export of missing leads */
+      window._ttMissingLeads=missing;
+      html+='<div style="margin-top:12px;"><button type="button" id="ttExportMissingBtn" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:6px;cursor:pointer;background:var(--surface2);">⬇ Export missing leads as CSV</button></div>';
+    }
+    res.innerHTML=html;
+    /* Wire export button */
+    var expBtn=document.getElementById('ttExportMissingBtn');
+    if(expBtn)expBtn.addEventListener('click',function(){
+      var rows=window._ttMissingLeads||[];
+      var csv='Name,Phone,Service,Lead Date,Status,Budget\n'+rows.map(function(r){return[r.name,r.phone,r.service,r.date,r.status,r.budget].map(rCsvEsc).join(',');}).join('\n');
+      if(typeof downloadTextFile==='function')downloadTextFile('thumbtack_missing_leads_'+new Date().toISOString().slice(0,10)+'.csv',csv,'text/csv');
+    });
+  }
+
+  document.addEventListener('click',function(e){
+    if(e.target&&e.target.id==='ttRunCompareBtn'){
+      var inp=document.getElementById('ttCsvFileInput');
+      if(!inp||!inp.files||!inp.files[0]){alert('Please choose a CSV file first.');return;}
+      var reader=new FileReader();
+      reader.onload=function(ev){runThumbCompare(ev.target.result);};
+      reader.readAsText(inp.files[0]);
+    }
+  });
+
+  /* ── Helper: pre-fill new event form from a Thumbtack lead row ── */
+  window.prefillNewEventFromLead=function(lead){
+    if(typeof clearEventForm==='function')clearEventForm();
+    setTimeout(function(){
+      var nameEl=document.getElementById('eNewCustomerName');
+      var phoneEl=document.getElementById('eNewCustomerPhone');
+      var typeEl=document.getElementById('eEventType');
+      if(nameEl&&lead.name)nameEl.value=lead.name;
+      if(phoneEl&&lead.phone)phoneEl.value=lead.phone;
+      if(typeEl&&lead.service)typeEl.value=lead.service;
+      if(typeof switchEventSubtab==='function')switchEventSubtab('form');
+      if(typeof activateEventFormSection==='function')activateEventFormSection('eventDetailsSection');
+    },100);
   };
 
   function runReport(id){
