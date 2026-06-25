@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260625_080';
+  const BUILD='v20260625_081';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -787,7 +787,7 @@ tr:hover td { background:var(--surface2); }
           <div class="db-panel">
             <div class="db-panel-hdr"><span class="db-panel-title">📈 Win Rate</span><span class="db-kpi-label" style="margin:0;">rolling 7-day window</span></div>
             <div style="position:relative;height:200px;"><canvas id="chartWinRate"></canvas></div>
-            <div class="small" style="color:var(--ink3);margin-top:6px;">% of leads entered in each 7-day window eventually booked or completed.</div>
+            <div class="small" style="color:var(--ink3);margin-top:6px;">% of leads by contact date in each 7-day window eventually booked or completed.</div>
           </div>
           <div class="db-panel">
             <div class="db-panel-hdr"><span class="db-panel-title">💸 Ad Spend</span><span class="db-kpi-label" style="margin:0;">rolling 7-day window</span></div>
@@ -924,7 +924,6 @@ tr:hover td { background:var(--surface2); }
               <div class="field-wrap"><label class="field-label" for="eNewCustomerPhone">Customer phone</label><input id="eNewCustomerPhone" placeholder="Customer phone"></div>
               <div class="field-wrap"><label class="field-label" for="eStatus">Status</label><select id="eStatus"><option value="deciding">deciding</option><option value="booked">booked</option><option value="completed">completed</option><option value="lost">lost</option><option value="canceled">canceled/postponed</option></select></div>
               <div class="field-wrap"><label class="field-label" for="eEventType">Event type</label><input id="eEventType" type="text" placeholder="Dinner party, wedding, birthday, corporate event" autocomplete="off" tabindex="0"></div>
-              <div class="field-wrap"><label class="field-label" for="eCreatedAt">Date entered</label><input id="eCreatedAt" type="date" title="Date this lead was entered into the system"></div>
               <div class="field-wrap"><label class="field-label" for="eDateOfContact">Date of contact</label><input id="eDateOfContact" type="date" title="Date the customer first contacted you (e.g. Thumbtack request date)"></div>
             </div>
             <div class="row four">
@@ -4101,267 +4100,7 @@ renderAll();ensureEditableContractFields();
   }, 5000);
 })();
 
-/* ── One-time createdAt migration from Thumbtack contacts CSV ── */
-(function migrateCreatedAt(){
-  if(localStorage.getItem('lbt_createdAt_migrated_v1')) return;
-  var CSV=[
-    ["Shana Shana","3233267161","2026-06-10"],
-    ["Christina Lynch","2402776337","2026-06-09"],
-    ["Kevin Shahi","6302207691","2026-06-08"],
-    ["Jackie Manning","7087458457","2026-06-08"],
-    ["Cassidy Taiym","6302222361","2026-06-08"],
-    ["Brian Behm","6127413113","2026-06-08"],
-    ["Kris Walker","8472178403","2026-06-07"],
-    ["Cameron Giles","6306057211","2026-06-07"],
-    ["Tash Banks","7736738994","2026-06-06"],
-    ["Megan Wong","4158232304","2026-06-05"],
-    ["Claudia Garcia","2193146123","2026-06-05"],
-    ["serena kapoor","6308850537","2026-06-04"],
-    ["Maddalen Yarza","2133001521","2026-06-04"],
-    ["Maya maya","6309154569","2026-06-04"],
-    ["Alexa Hyman","6302001653","2026-06-01"],
-    ["Lauren Miles","4799250709","2026-06-01"],
-    ["Yamili Saucedo","6307077979","2026-05-31"],
-    ["Ruben Torres","8474175661","2026-05-31"],
-    ["Jenna Conforti","","2026-05-31"],
-    ["Caroline Trecartin","7082541626","2026-05-31"],
-    ["Jim Strachan","8475467769","2026-05-31"],
-    ["Leanna Gentry","3128383140","2026-05-31"],
-    ["andrea villanueva","7736105763","2026-05-30"],
-    ["Molly Shannon","2709948801","2026-05-28"],
-    ["Kelly Iler","2192424816","2026-05-27"],
-    ["Alana Sivo","9522559654","2026-05-27"],
-    ["Rigoberto Ramirez","7733966947","2026-05-27"],
-    ["Sarah Gutierrez","7083235185","2026-05-26"],
-    ["Dayzi Brown","2622216631","2026-05-26"],
-    ["Henry Goldman","7733604766","2026-05-26"],
-    ["Markus Simmons","7088285769","2026-05-25"],
-    ["Donna Rice","8475283043","2026-05-23"],
-    ["Krista Santangelo","2032097848","2026-05-22"],
-    ["Amy Axford","6462566015","2026-05-22"],
-    ["Nathalie Lankford","7044441195","2026-05-21"],
-    ["Mia Allen","7737066857","2026-05-20"],
-    ["Michael Chaput","8313839391","2026-05-20"],
-    ["Aysha Ali","8473382972","2026-05-20"],
-    ["Emily Kaplan","4255771153","2026-05-14"],
-    ["Roberta Garza","7734410331","2026-05-13"],
-    ["jaimie szczepanski","7737338817","2026-05-10"],
-    ["Shazana Nadeem","7737961018","2026-05-06"],
-    ["Lindsey Rensch","3125500340","2026-05-06"],
-    ["Alyssa Hayes","7192095008","2026-05-04"],
-    ["Sandeep Kulkarni","3126078392","2026-05-04"],
-    ["Tami Wilson","8593806007","2026-05-03"],
-    ["Brian Bushnell","6302095711","2026-05-02"],
-    ["Evin Marie","7082759115","2026-05-02"],
-    ["Balvir Singh","9167760404","2026-05-01"],
-    ["Pritika Patel","8478303013","2026-05-01"],
-    ["Ashaunda Parker","3127224772","2026-05-01"],
-    ["Lily Speer","8472874860","2026-04-30"],
-    ["Maribeth Russell","6122276745","2026-04-30"],
-    ["Vanessa Diaz","2247150606","2026-04-29"],
-    ["Brianna Green","7543120126","2026-04-29"],
-    ["Clark Kapphan","7245916047","2026-04-29"],
-    ["Nicholas Thornburg","2246590134","2026-04-29"],
-    ["Stefani Nekic","3122178310","2026-04-28"],
-    ["Andrea Fernandez","3126595880","2026-04-28"],
-    ["Danny Cameron","8473377301","2026-04-28"],
-    ["Esmeralda palma","7086634519","2026-04-27"],
-    ["Madden Callahan","4046324811","2026-04-27"],
-    ["Elizabeth Fell","6303291152","2026-04-27"],
-    ["Amrutha Sivakumar","8476566811","2026-04-26"],
-    ["Erin Potterton","7738084033","2026-04-24"],
-    ["Justin Negash","7737988661","2026-04-24"],
-    ["Emily DiPasquantonio","6304145585","2026-04-23"],
-    ["Ashley Carman","8476517906","2026-04-23"],
-    ["Samantha Kucera","6175711338","2026-04-23"],
-    ["Jorge Gavillan","3523467306","2026-04-22"],
-    ["Russell Sanchez","8477720206","2026-04-22"],
-    ["Alexis Martell","7022099492","2026-04-22"],
-    ["Frank Maugeri","3129658835","2026-04-22"],
-    ["Juliette Moore","7733196637","2026-04-21"],
-    ["Heather Cavada","3122172585","2026-04-21"],
-    ["Alex Wu","2815132679","2026-04-20"],
-    ["Kara Packwood","3128044297","2026-04-20"],
-    ["Renee Splitt","8478285691","2026-04-19"],
-    ["Marquitta Wallace","7082684396","2026-04-18"],
-    ["Vishaan Patel","2245785780","2026-04-17"],
-    ["Jennifer Ortega","3128822542","2026-04-16"],
-    ["Josiah McNeal","3129196542","2026-04-16"],
-    ["Ke Gi","2538807592","2026-04-15"],
-    ["Brianna Ebbert-Moede","8156169775","2026-04-14"],
-    ["Sean Scarry","8475250549","2026-04-14"],
-    ["Rachael Bulwicki","8152950076","2026-04-13"],
-    ["Jessica Hernandez","8153079197","2026-04-12"],
-    ["Nina Gozzi","8608175019","2026-04-12"],
-    ["Heather Mussar","6306697684","2026-04-12"],
-    ["Rebecca Day","6302026642","2026-04-11"],
-    ["Payal Shah","6305182335","2026-04-11"],
-    ["Gaby De la torre","6304638565","2026-04-09"],
-    ["Caitlyn Morrissey","6307969420","2026-04-09"],
-    ["Todd Ruder","7735624234","2026-04-09"],
-    ["Chandana Mahale","5852694405","2026-04-08"],
-    ["Bhavin Shah","6304480615","2026-04-07"],
-    ["Carlos Lorenzo","7733871462","2026-04-05"],
-    ["Alisa Ferguson","7816921291","2026-04-01"],
-    ["Jorge Munoz","7737460585","2026-03-30"],
-    ["Natalia Miranda","7738993872","2026-03-30"],
-    ["Kevin Dwyer","6306749446","2026-03-30"],
-    ["Kami Flick","2192990993","2026-03-29"],
-    ["Linda Nguyen","3109740777","2026-03-27"],
-    ["Jamie Burt","4803588235","2026-03-27"],
-    ["Matt Walters","3178503917","2026-03-27"],
-    ["bianca Garcia","7737509290","2026-03-26"],
-    ["Nayeli Ortiz","6304568949","2026-03-26"],
-    ["Jerron Dennis","7865060452","2026-03-25"],
-    ["Sujay Mahtani","4047237846","2026-03-24"],
-    ["Jessica Svabek","8156745871","2026-03-24"],
-    ["Nick Quirke","3123752644","2026-03-24"],
-    ["Jax Ramos","3129780314","2026-03-24"],
-    ["Becca Harkema","7089354429","2026-03-24"],
-    ["Adam Stevenson","6303468940","2026-03-23"],
-    ["Amber Billares","8479998303","2026-03-23"],
-    ["Tory Mitchell","7737519660","2026-03-21"],
-    ["Rachael Rosario","8473706399","2026-03-20"],
-    ["Alejandro Cisneros","7084698238","2026-03-19"],
-    ["Britney Briseno","8473872491","2026-03-18"],
-    ["Esmeralda Flo","8156001219","2026-03-18"],
-    ["Robert Ramey","2245457588","2026-03-17"],
-    ["Malachi Wilkins","6235653285","2026-03-16"],
-    ["Cheyenne Cole","2198161627","2026-03-16"],
-    ["Luisa Mestriner","7733862234","2026-03-11"],
-    ["Olivia Rough","5025541004","2026-03-10"],
-    ["Sara Gonzalez","7732308661","2026-03-10"],
-    ["Malinda Crumbly","2192311264","2026-03-10"],
-    ["Aaliyah Garibay","6517958694","2026-03-07"],
-    ["Michelle Wright","7086503305","2026-03-07"],
-    ["Amina Sheppard","2098174021","2026-03-03"],
-    ["Darius Caldwell","7733222149","2026-02-27"],
-    ["Rosemary Ndikum","7089962218","2026-02-27"],
-    ["Barbora Simerska","8475337361","2026-02-25"],
-    ["Rebecca coates","7082753799","2026-02-21"],
-    ["Rezi Useh","6122323241","2026-02-02"]
-  ];
-
-  function normPhone(p){ return (p||'').replace(/\D/g,'').slice(-10); }
-  function normName(n){ return (n||'').toLowerCase().replace(/\s+/g,' ').trim(); }
-
-  if(!state||!state.events) return;
-
-  var matchedEvents=0, unmatchedCSV=[];
-
-  CSV.forEach(function(row){
-    var csvName=row[0], csvPhone=normPhone(row[1]), csvDate=row[2];
-    var iso=csvDate+'T12:00:00.000Z';
-
-    /* Find matching customer by phone first, then name */
-    var custMatch=null;
-    if(csvPhone&&state.customers){
-      custMatch=state.customers.find(function(c){ return normPhone(c.phone)===csvPhone; });
-    }
-    if(!custMatch&&state.customers){
-      var nn=normName(csvName);
-      custMatch=state.customers.find(function(c){ return normName(c.name)===nn; });
-    }
-
-    if(custMatch){
-      state.events.forEach(function(e){
-        if(e.customerId===custMatch.id||e.customer===custMatch.id){
-          e.createdAt=iso;
-          matchedEvents++;
-        }
-      });
-    } else {
-      /* Try matching directly on event name as last resort */
-      var nn=normName(csvName);
-      state.events.forEach(function(e){
-        var evName=normName(e.eventName||e.name||'');
-        if(evName&&nn&&(evName.includes(nn.split(' ')[0])||nn.includes(evName.split(' ')[0]))){
-          if(!e.createdAt){ e.createdAt=iso; matchedEvents++; }
-        }
-      });
-      unmatchedCSV.push(csvName);
-    }
-  });
-
-  try{ window.saveState(); }catch(ex){}
-  localStorage.setItem('lbt_createdAt_migrated_v1','1');
-  console.log('[LBT Migration] createdAt stamped on '+matchedEvents+' events. Unmatched CSV rows: '+unmatchedCSV.length, unmatchedCSV);
-
-  /* Migration complete — unmatched rows logged to console only */
-  if(unmatchedCSV.length>0){
-    console.log('[LBT Migration] Unmatched contacts (no download):',unmatchedCSV);
-  }
-})();
-
-/* ── Date Entered field wiring ── */
-(function dateEnteredField(){
-  function toDateInput(iso){ return iso ? iso.slice(0,10) : ''; }
-  function toISO(dateStr){ return dateStr ? dateStr+'T12:00:00.000Z' : ''; }
-  function todayStr(){ return new Date().toISOString().slice(0,10); }
-
-  /* Patch window.editEvent: after loading event data, set eCreatedAt from e.createdAt */
-  var origEditEvent=window.editEvent;
-  window.editEvent=function(id){
-    if(origEditEvent) origEditEvent.apply(this,arguments);
-    setTimeout(function(){
-      var f=document.getElementById('eCreatedAt');
-      if(!f) return;
-      var ev=state&&state.events&&state.events.find(function(e){ return e.id===id; });
-      f.value=ev&&ev.createdAt ? toDateInput(ev.createdAt) : todayStr();
-    },30);
-  };
-
-  /* New-event button: set today when form is cleared */
-  var newBtn=document.getElementById('newEventBtn');
-  if(newBtn){
-    newBtn.addEventListener('click',function(){
-      setTimeout(function(){
-        var f=document.getElementById('eCreatedAt');
-        if(f) f.value=todayStr();
-      },30);
-    });
-  }
-
-  /* Save: read eCreatedAt and persist to e.createdAt BEFORE the original save runs,
-     then re-save so the value sticks. We intercept saveEventPayloadFromForm. */
-  var origSave2=window.saveEventPayloadFromForm;
-  window.saveEventPayloadFromForm=function(opts){
-    /* Stamp the field value onto the event in state before calling original save */
-    var f=document.getElementById('eCreatedAt');
-    var iso=f&&f.value ? toISO(f.value) : null;
-    /* Resolve the current event id (editingEventId is a let in the outer scope,
-       accessible via closure since this script runs in the same scope chain) */
-    var result=origSave2 ? origSave2.apply(this,arguments) : undefined;
-    if(iso&&state&&state.events){
-      /* After save, find the event that was just written and stamp createdAt */
-      var savedId=(result&&result.id)
-        ? result.id
-        : (state.events.length ? state.events[state.events.length-1].id : null);
-      /* Also try to match the most-recently-saved event by checking eDate */
-      var eDate=document.getElementById('eDate');
-      var eName=document.getElementById('eName');
-      var target=null;
-      if(savedId) target=state.events.find(function(e){ return e.id===savedId; });
-      if(!target&&eName&&eName.value){
-        var nm=eName.value.trim();
-        /* find most recent match by name */
-        for(var i=state.events.length-1;i>=0;i--){
-          if((state.events[i].eventName||'')=== nm){ target=state.events[i]; break; }
-        }
-      }
-      if(!target) target=state.events[state.events.length-1];
-      if(target) target.createdAt=iso;
-      try{ window.saveState(); }catch(ex){}
-    }
-    return result;
-  };
-
-  /* Set today on initial page load */
-  setTimeout(function(){
-    var f=document.getElementById('eCreatedAt');
-    if(f&&!f.value) f.value=todayStr();
-  },400);
-})();
+/* createdAt field and dateEnteredField wiring removed — dateOfContact is the sole date field */
 
 /* ── Weekly Metrics Charts ── */
 (function weeklyCharts(){
@@ -4370,14 +4109,7 @@ renderAll();ensureEditableContractFields();
   function stampEvents(){
     if(!state||!state.events) return;
     var now=new Date().toISOString();
-    var todayMs=new Date().setHours(23,59,59,999);
     state.events.forEach(function(e){
-      if(!e.createdAt){
-        /* Use event date only if it's in the past — future-dated events were entered
-           recently so use today as createdAt so they appear in the current chart window */
-        var evDateMs=e.date?new Date(e.date).getTime():0;
-        e.createdAt=(evDateMs>0&&evDateMs<=todayMs)?e.date+'T00:00:00.000Z':now;
-      }
       if((e.status==='booked'||e.status==='completed')&&!e.bookedAt) e.bookedAt=e.date?e.date+'T00:00:00.000Z':now;
     });
   }
@@ -4394,7 +4126,6 @@ renderAll();ensureEditableContractFields();
     var now=new Date().toISOString();
     if(state&&state.events){
       state.events.forEach(function(e){
-        if(!e.createdAt) e.createdAt=now;
         if((e.status==='booked'||e.status==='completed')&&!e.bookedAt){
           if(isNew||prevStatuses[e.id]!==e.status) e.bookedAt=now;
           else e.bookedAt=e.date?e.date+'T00:00:00.000Z':now;
@@ -4449,9 +4180,9 @@ renderAll();ensureEditableContractFields();
     var events=(state&&state.events)||[];
     var weeks=buildWeeks(8);
 
-    /* Win Rate */
+    /* Win Rate — grouped by dateOfContact (consistent with ad spend) */
     var wrRates=weeks.map(function(w){
-      var entered=events.filter(function(e){ return inWeek(e.createdAt,w); });
+      var entered=events.filter(function(e){ return inWeek(e.dateOfContact,w); });
       if(!entered.length) return null;
       var booked=entered.filter(function(e){ return e.status==='booked'||e.status==='completed'; });
       return Math.round(booked.length/entered.length*100);
@@ -4459,11 +4190,9 @@ renderAll();ensureEditableContractFields();
 
     var labels=weeks.map(function(w){ return w.label; });
 
-    /* Ad spend: grouped by dateOfContact (when the lead arrived / ad was spent).
-       Falls back to createdAt only if no contact date is set.
-       This prevents imported historical leads from all landing in the current week. */
+    /* Ad spend: grouped by dateOfContact */
     var adSpend=weeks.map(function(w){
-      var total=events.filter(function(e){ return inWeek(e.dateOfContact||e.createdAt,w); })
+      var total=events.filter(function(e){ return inWeek(e.dateOfContact,w); })
         .reduce(function(s,e){ return s+parseFloat(e.advertisingCost||e.adCost||0); },0);
       return total>0?Math.round(total):null;
     });
