@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260624_079';
+  const BUILD='v20260625_080';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -792,7 +792,7 @@ tr:hover td { background:var(--surface2); }
           <div class="db-panel">
             <div class="db-panel-hdr"><span class="db-panel-title">💸 Ad Spend</span><span class="db-kpi-label" style="margin:0;">rolling 7-day window</span></div>
             <div style="position:relative;height:200px;"><canvas id="chartAdSpend"></canvas></div>
-            <div class="small" style="color:var(--ink3);margin-top:6px;">Total ad cost for leads entered in each 7-day window.</div>
+            <div class="small" style="color:var(--ink3);margin-top:6px;">Total ad cost by contact date (when the lead arrived), not import date.</div>
           </div>
         </div>
         <div class="db-panel">
@@ -3976,6 +3976,10 @@ renderAll();ensureEditableContractFields();
     var lifetimeAdPct=lifetimeTotalRev>0?Math.round(lifetimeTotalAd/lifetimeTotalRev*100):null;
     /* Cost per acquisition: booked + completed (both are wins) */
     var costPerAcq=allBookedOrCompleted.length>0?Math.round(lifetimeTotalAd/allBookedOrCompleted.length):null;
+    /* YTD ad spend — use dateOfContact to attribute spend to when the lead arrived */
+    var adSpendYTD=events.filter(function(e){
+      var d=e.dateOfContact||''; return d.startsWith(currentYear);
+    }).reduce(function(s,e){return s+parseFloat(e.advertisingCost||e.adCost||0);},0);
 
     /* Upcoming events (next 14 days, booked or deciding) */
     var upcoming=events.filter(function(e){
@@ -4004,6 +4008,7 @@ renderAll();ensureEditableContractFields();
     html+='<div class="db-kpi yellow"><div class="db-kpi-label">Pending Collections</div><div class="db-kpi-value">'+fmt$(pendingCollections)+'</div><div class="db-kpi-sub">unpaid balances</div></div>';
     html+='<div class="db-kpi red"><div class="db-kpi-label">Open Follow-Ups</div><div class="db-kpi-value">'+openFollowUps.length+'</div><div class="db-kpi-sub">'+(overdueFollowUps.length?' ⚠ '+overdueFollowUps.length+' overdue':'all on track')+'</div></div>';
     html+='<div class="db-kpi" style="border-top:3px solid #8b5cf6;"><div class="db-kpi-label">Lifetime Ad Cost %</div><div class="db-kpi-value">'+(lifetimeAdPct!==null?lifetimeAdPct+'%':'—')+'</div><div class="db-kpi-sub">ad spend ÷ booked+completed quotes</div></div>';
+    html+='<div class="db-kpi" style="border-top:3px solid #d97706;"><div class="db-kpi-label">Ad Spend YTD</div><div class="db-kpi-value">'+fmt$(adSpendYTD)+'</div><div class="db-kpi-sub">by contact date · '+currentYear+'</div></div>';
     html+='<div class="db-kpi" style="border-top:3px solid #0e7490;"><div class="db-kpi-label">Revenue This Year</div><div class="db-kpi-value">'+fmt$(revenueYTD)+'</div><div class="db-kpi-sub">collected YTD · '+currentYear+'</div></div>';
     html+='<div class="db-kpi" style="border-top:3px solid #0f766e;"><div class="db-kpi-label">Net Amount YTD</div><div class="db-kpi-value">'+fmt$(netYTD)+'</div><div class="db-kpi-sub">collected − bartender costs</div></div>';
     html+='<div class="db-kpi" style="border-top:3px solid #15803d;"><div class="db-kpi-label">Profit Margin YTD</div><div class="db-kpi-value">'+(marginYTD!==null?marginYTD+'%':'—')+'</div><div class="db-kpi-sub">net ÷ revenue · '+currentYear+'</div></div>';
@@ -4454,9 +4459,11 @@ renderAll();ensureEditableContractFields();
 
     var labels=weeks.map(function(w){ return w.label; });
 
-    /* Ad spend: grouped by createdAt (when lead was entered / ad was spent) */
+    /* Ad spend: grouped by dateOfContact (when the lead arrived / ad was spent).
+       Falls back to createdAt only if no contact date is set.
+       This prevents imported historical leads from all landing in the current week. */
     var adSpend=weeks.map(function(w){
-      var total=events.filter(function(e){ return inWeek(e.createdAt,w); })
+      var total=events.filter(function(e){ return inWeek(e.dateOfContact||e.createdAt,w); })
         .reduce(function(s,e){ return s+parseFloat(e.advertisingCost||e.adCost||0); },0);
       return total>0?Math.round(total):null;
     });
