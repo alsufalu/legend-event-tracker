@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260625_081';
+  const BUILD='v20260625_082';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -982,6 +982,26 @@ tr:hover td { background:var(--surface2); }
               <div class="field-wrap"><label class="field-label" for="eFinalMethod">Final payment method</label><input id="eFinalMethod" placeholder="e.g. Venmo, Zelle, cash, check"></div>
             </div>
 
+            <!-- Quoted rates -->
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin:16px 0 8px;">Quoted Rates</div>
+            <div class="small" style="margin-bottom:10px;">Enter the rates you quoted to the customer. These are saved with the event and automatically pre-fill the Contract &amp; Quote Builder when you generate a contract.</div>
+            <div class="row four" style="margin-bottom:10px;">
+              <div class="field-wrap"><label class="field-label" for="eQBartenderCount"># Bartenders quoted</label><input id="eQBartenderCount" type="number" min="0" step="1" placeholder="1"></div>
+              <div class="field-wrap"><label class="field-label" for="eQBartenderRate">Bartender rate ($/hr)</label><input id="eQBartenderRate" type="number" min="0" step="1" placeholder="70"></div>
+              <div class="field-wrap"><label class="field-label" for="eQBartenderSetupHours">Bartender setup/cleanup hrs</label><input id="eQBartenderSetupHours" type="number" min="0" step="0.5" placeholder="1"></div>
+              <div class="field-wrap"><label class="field-label" for="eQDepositPercent">Deposit %</label><input id="eQDepositPercent" type="number" min="0" max="100" step="1" placeholder="30"></div>
+            </div>
+            <div class="row four" style="margin-bottom:10px;">
+              <div class="field-wrap"><label class="field-label" for="eQBarbackCount"># Barbacks quoted</label><input id="eQBarbackCount" type="number" min="0" step="1" placeholder="0"></div>
+              <div class="field-wrap"><label class="field-label" for="eQBarbackRate">Barback rate ($/hr)</label><input id="eQBarbackRate" type="number" min="0" step="1" placeholder="25"></div>
+              <div class="field-wrap"><label class="field-label" for="eQBarbackSetupHours">Barback setup/cleanup hrs</label><input id="eQBarbackSetupHours" type="number" min="0" step="0.5" placeholder="1"></div>
+              <div class="field-wrap"><label class="field-label" for="eQTravelFee">Travel fee ($)</label><input id="eQTravelFee" type="number" min="0" step="1" placeholder="0"></div>
+            </div>
+            <div class="field-wrap">
+              <label class="field-label" for="eQCustomTerms">Custom contract notes / terms</label>
+              <textarea id="eQCustomTerms" placeholder="Optional notes or special terms to include in the contract"></textarea>
+            </div>
+
           </div>
         </div>
 
@@ -1015,7 +1035,7 @@ tr:hover td { background:var(--surface2); }
         <div class="event-form-section" id="contractQuoteBuilderSection">
           <div class="contract-panel">
             <h3>Contract &amp; Quote Builder</h3>
-            <div class="small" style="margin-bottom:8px;">These fields are used only to build the customer-facing contract service line items. They do not change bartender payout unless you also edit the assigned bartender rates.</div>
+            <div class="small" style="margin-bottom:8px;">These fields are pre-filled from your <strong>Quoted Rates</strong> (Quotation &amp; Payment tab). You can override them here for this contract only — <em>changes here are not saved</em>.</div>
             <div class="buttonbar" style="margin-bottom:8px; align-items:center;">
               <button type="button" id="chooseContractTemplateBtn">Choose contract template</button>
               <button type="button" id="clearContractTemplateBtn">Use built-in template</button>
@@ -2238,15 +2258,15 @@ function updateBalanceDueField() { const field = document.getElementById("eBalan
 function calculateContractPricingFromForm() {
   const duration = calcDurationHours(document.getElementById("eStartTime").value, document.getElementById("eEndTime").value) || 0;
   const assignedBartenders = getCurrentAssignments().length || 0;
-  const enteredBartenderCount = numeric(document.getElementById("eContractBartenderCount").value);
+  const enteredBartenderCount = numeric(document.getElementById("eQBartenderCount").value);
   const bartenderCount = enteredBartenderCount || assignedBartenders || 1;
-  const bartenderRate = numeric(document.getElementById("eContractBartenderRate").value) ?? 70;
-  const bartenderSetupHours = numeric(document.getElementById("eContractBartenderSetupHours").value) ?? 1;
-  const barbackCount = numeric(document.getElementById("eContractBarbackCount").value) || 0;
-  const barbackRate = numeric(document.getElementById("eContractBarbackRate").value) ?? 25;
-  const barbackSetupHours = numeric(document.getElementById("eContractBarbackSetupHours").value) ?? 1;
-  const travelFee = numeric(document.getElementById("eTravelFee").value) || 0;
-  const depositPercent = numeric(document.getElementById("eContractDepositPercent").value) ?? 30;
+  const bartenderRate = numeric(document.getElementById("eQBartenderRate").value) ?? 70;
+  const bartenderSetupHours = numeric(document.getElementById("eQBartenderSetupHours").value) ?? 1;
+  const barbackCount = numeric(document.getElementById("eQBarbackCount").value) || 0;
+  const barbackRate = numeric(document.getElementById("eQBarbackRate").value) ?? 25;
+  const barbackSetupHours = numeric(document.getElementById("eQBarbackSetupHours").value) ?? 1;
+  const travelFee = numeric(document.getElementById("eQTravelFee").value) || 0;
+  const depositPercent = numeric(document.getElementById("eQDepositPercent").value) ?? 30;
   let total = 0;
   if (bartenderCount > 0 && bartenderRate > 0 && duration > 0) total += bartenderCount * duration * bartenderRate;
   if (bartenderCount > 0 && bartenderRate > 0 && bartenderSetupHours > 0) total += bartenderCount * bartenderSetupHours * bartenderRate;
@@ -2292,7 +2312,7 @@ document.getElementById("eEndTime").addEventListener("input", () => { updateDura
 document.getElementById("eStartTime").addEventListener("input", () => { updateDurationField(); refreshStaffPayoutPreviews(); });
 ["eQuote","eDepositPaid","eFinalPaid"].forEach(id => document.getElementById(id).addEventListener("input", updateBalanceDueField));
 ["eStaffOvertimeHours"].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener("input", refreshStaffPayoutPreviews); });
-["eStartTime","eEndTime","eTravelFee","eContractDepositPercent","eContractBartenderCount","eContractBartenderRate","eContractBartenderSetupHours","eContractBarbackCount","eContractBarbackRate","eContractBarbackSetupHours"].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener("input", applyContractPricingToForm); });
+["eStartTime","eEndTime","eQTravelFee","eQDepositPercent","eQBartenderCount","eQBartenderRate","eQBartenderSetupHours","eQBarbackCount","eQBarbackRate","eQBarbackSetupHours"].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener("input", applyContractPricingToForm); });
 document.getElementById("eCustomer").addEventListener("change", () => {
   updateCustomerPhoneDisplay();
   if (document.getElementById("eCustomer").value) { document.getElementById("eNewCustomerName").value = ""; document.getElementById("eNewCustomerPhone").value = ""; }
@@ -2431,7 +2451,7 @@ function buildEventPayloadFromForm() {
   const balance = Math.max(0, quote - totalPaid);
   const bartenderAssignments = getCurrentAssignments();
   const customerId = resolveEventCustomerId();
-  return { id: editingEventId || nextEventId(), eventName: document.getElementById("eName").value.trim(), customerId, status: document.getElementById("eStatus").value, eventType: document.getElementById("eEventType").value.trim(), date: document.getElementById("eDate").value, startTime: document.getElementById("eStartTime").value, endTime: document.getElementById("eEndTime").value, guestCount: numeric(document.getElementById("eGuests").value), venueName: document.getElementById("eVenueName").value.trim(), venueAddress: document.getElementById("eVenueAddress").value.trim(), barSetup: document.getElementById("eBarSetup").value, existingBar: document.getElementById("eBarSetup").value === "existing", bookingSite: document.getElementById("eBookingSite").value.trim(), quotationAmount: quote, depositRequired: numeric(document.getElementById("eDepositRequired").value), depositAmountPaid: depositPaid, depositDatePaid: document.getElementById("eDepositDate").value, depositPaidBy: document.getElementById("eDepositPaidBy").value.trim(), finalAmountPaid: finalPaid, finalAmountPaidDate: document.getElementById("eFinalPaidDate").value, finalAmountPaymentMethod: document.getElementById("eFinalMethod").value.trim(), contractSentDate: document.getElementById("eContractSentDate").value, staffOvertimeHours: numeric(document.getElementById("eStaffOvertimeHours").value) || 0, billClientExtraTime: false, extraTimeRate: 0, extraTimeBilled: 0, overtimeNotes: document.getElementById("eOvertimeNotes").value.trim(), travelFee: numeric(document.getElementById("eTravelFee").value) || 0, contractDepositPercent: numeric(document.getElementById("eContractDepositPercent").value) ?? 30, contractBartenderCount: numeric(document.getElementById("eContractBartenderCount").value) || getCurrentAssignments().length || 1, contractBartenderRate: numeric(document.getElementById("eContractBartenderRate").value) ?? 70, contractBartenderSetupHours: numeric(document.getElementById("eContractBartenderSetupHours").value) ?? 1, contractBarbackCount: numeric(document.getElementById("eContractBarbackCount").value) || 0, contractBarbackRate: numeric(document.getElementById("eContractBarbackRate").value) ?? 25, contractBarbackSetupHours: numeric(document.getElementById("eContractBarbackSetupHours").value) ?? 1, contractGeneratedDate: document.getElementById("eContractGeneratedDate").value, contractSignedDate: document.getElementById("eContractSignedDate").value, contractFileName: document.getElementById("eContractFileName").value.trim(), customContractTerms: document.getElementById("eCustomContractTerms").value.trim(), location: document.getElementById("eLocation").value.trim(), description: document.getElementById("eDescription").value.trim(), latestUpdate: document.getElementById("eUpdate").value.trim(), followUpDate: document.getElementById("eFollowUpDate").value, followUpType: document.getElementById("eFollowUpType").value, followUpStatus: document.getElementById("eFollowUpStatus").value || "open", followUpCompletedDate: document.getElementById("eFollowUpCompletedDate").value, followUpNotes: document.getElementById("eFollowUpNotes").value.trim(), totalAmountPaid: totalPaid, balanceDue: balance, eventCosts: numeric(document.getElementById("eCosts").value) || 0, advertisingCost: numeric(document.getElementById("eAdCost").value) || 0, dateOfContact: document.getElementById("eDateOfContact").value || "", bartenderAssignments };
+  return { id: editingEventId || nextEventId(), eventName: document.getElementById("eName").value.trim(), customerId, status: document.getElementById("eStatus").value, eventType: document.getElementById("eEventType").value.trim(), date: document.getElementById("eDate").value, startTime: document.getElementById("eStartTime").value, endTime: document.getElementById("eEndTime").value, guestCount: numeric(document.getElementById("eGuests").value), venueName: document.getElementById("eVenueName").value.trim(), venueAddress: document.getElementById("eVenueAddress").value.trim(), barSetup: document.getElementById("eBarSetup").value, existingBar: document.getElementById("eBarSetup").value === "existing", bookingSite: document.getElementById("eBookingSite").value.trim(), quotationAmount: quote, depositRequired: numeric(document.getElementById("eDepositRequired").value), depositAmountPaid: depositPaid, depositDatePaid: document.getElementById("eDepositDate").value, depositPaidBy: document.getElementById("eDepositPaidBy").value.trim(), finalAmountPaid: finalPaid, finalAmountPaidDate: document.getElementById("eFinalPaidDate").value, finalAmountPaymentMethod: document.getElementById("eFinalMethod").value.trim(), contractSentDate: document.getElementById("eContractSentDate").value, staffOvertimeHours: numeric(document.getElementById("eStaffOvertimeHours").value) || 0, billClientExtraTime: false, extraTimeRate: 0, extraTimeBilled: 0, overtimeNotes: document.getElementById("eOvertimeNotes").value.trim(), quotedBartenderCount: numeric(document.getElementById("eQBartenderCount").value) || null, quotedBartenderRate: numeric(document.getElementById("eQBartenderRate").value) ?? null, quotedBartenderSetupHours: numeric(document.getElementById("eQBartenderSetupHours").value) ?? null, quotedBarbackCount: numeric(document.getElementById("eQBarbackCount").value) || 0, quotedBarbackRate: numeric(document.getElementById("eQBarbackRate").value) ?? null, quotedBarbackSetupHours: numeric(document.getElementById("eQBarbackSetupHours").value) ?? null, quotedDepositPercent: numeric(document.getElementById("eQDepositPercent").value) ?? null, quotedTravelFee: numeric(document.getElementById("eQTravelFee").value) || 0, quotedCustomTerms: document.getElementById("eQCustomTerms").value.trim(), contractGeneratedDate: document.getElementById("eContractGeneratedDate").value, contractSignedDate: document.getElementById("eContractSignedDate").value, contractFileName: document.getElementById("eContractFileName").value.trim(), location: document.getElementById("eLocation").value.trim(), description: document.getElementById("eDescription").value.trim(), latestUpdate: document.getElementById("eUpdate").value.trim(), followUpDate: document.getElementById("eFollowUpDate").value, followUpType: document.getElementById("eFollowUpType").value, followUpStatus: document.getElementById("eFollowUpStatus").value || "open", followUpCompletedDate: document.getElementById("eFollowUpCompletedDate").value, followUpNotes: document.getElementById("eFollowUpNotes").value.trim(), totalAmountPaid: totalPaid, balanceDue: balance, eventCosts: numeric(document.getElementById("eCosts").value) || 0, advertisingCost: numeric(document.getElementById("eAdCost").value) || 0, dateOfContact: document.getElementById("eDateOfContact").value || "", bartenderAssignments };
 }
 function saveEventPayloadFromForm(options = {}) {
   const payload = buildEventPayloadFromForm();
@@ -2537,12 +2557,19 @@ window.editEvent = function(id) {
   document.getElementById("eDepositPaidBy").value=e.depositPaidBy||""; document.getElementById("eFinalPaid").value=e.finalAmountPaid??""; document.getElementById("eFinalPaidDate").value=e.finalAmountPaidDate||"";
   document.getElementById("eFinalMethod").value=e.finalAmountPaymentMethod||""; document.getElementById("eContractSentDate").value=e.contractSentDate||"";
   document.getElementById("eStaffOvertimeHours").value=eventStaffOvertimeHours(e)||""; document.getElementById("eOvertimeNotes").value=e.overtimeNotes||"";
-  document.getElementById("eTravelFee").value=e.travelFee??""; document.getElementById("eContractDepositPercent").value=e.contractDepositPercent??30;
-  document.getElementById("eContractBartenderCount").value=e.contractBartenderCount??""; document.getElementById("eContractBartenderRate").value=e.contractBartenderRate??"";
-  document.getElementById("eContractBartenderSetupHours").value=e.contractBartenderSetupHours??""; document.getElementById("eContractBarbackCount").value=e.contractBarbackCount??"";
-  document.getElementById("eContractBarbackRate").value=e.contractBarbackRate??""; document.getElementById("eContractBarbackSetupHours").value=e.contractBarbackSetupHours??"";
+  /* Load quoted rates — fall back to old contractXxx fields for events saved before this change */
+  document.getElementById("eQBartenderCount").value=e.quotedBartenderCount??e.contractBartenderCount??"";
+  document.getElementById("eQBartenderRate").value=e.quotedBartenderRate??e.contractBartenderRate??"";
+  document.getElementById("eQBartenderSetupHours").value=e.quotedBartenderSetupHours??e.contractBartenderSetupHours??"";
+  document.getElementById("eQBarbackCount").value=e.quotedBarbackCount??e.contractBarbackCount??"";
+  document.getElementById("eQBarbackRate").value=e.quotedBarbackRate??e.contractBarbackRate??"";
+  document.getElementById("eQBarbackSetupHours").value=e.quotedBarbackSetupHours??e.contractBarbackSetupHours??"";
+  document.getElementById("eQDepositPercent").value=e.quotedDepositPercent??e.contractDepositPercent??"";
+  document.getElementById("eQTravelFee").value=e.quotedTravelFee??e.travelFee??"";
+  document.getElementById("eQCustomTerms").value=e.quotedCustomTerms||e.customContractTerms||"";
+  /* Contract tab tracking dates — still saved */
   document.getElementById("eContractGeneratedDate").value=e.contractGeneratedDate||""; document.getElementById("eContractSignedDate").value=e.contractSignedDate||"";
-  document.getElementById("eContractFileName").value=e.contractFileName||""; document.getElementById("eCustomContractTerms").value=e.customContractTerms||"";
+  document.getElementById("eContractFileName").value=e.contractFileName||"";
   document.getElementById("eLocation").value=e.location||""; document.getElementById("eDescription").value=e.description||""; document.getElementById("eUpdate").value=e.latestUpdate||"";
   var docEl=document.getElementById("eDateOfContact"); if(docEl) docEl.value=e.dateOfContact||"";
   document.getElementById("eFollowUpDate").value=e.followUpDate||""; document.getElementById("eFollowUpType").value=e.followUpType||"";
@@ -2735,6 +2762,50 @@ function downloadWordContract(eventId){
   event.contractGeneratedDate=new Date().toISOString().slice(0,10);event.contractFileName=fileName;saveState();renderAll();
   if(String(currentModalEventId||"")===String(eventId||""))openEventDetails(eventId);
 }
+/* Generate contract from a temporary event object (not saved to state).
+   Used by the Contract & Quote Builder tab so overrides there are never persisted. */
+function downloadWordContractFromTempEvent(tempEvent){
+  const fileName=`Legend_Bartending_Contract_${contractFileSafeName((customerMap()[tempEvent.customerId]||{}).name||tempEvent.eventName)}_${tempEvent.date||"event"}.doc`;
+  const html=generateContractHtml(tempEvent);
+  downloadTextFile(fileName,html,"application/msword;charset=utf-8");
+  /* Only save the tracking dates and filename back to the real event */
+  const realEvent=(state.events||[]).find(e=>String(e.id||"")===String(tempEvent.id||""));
+  if(realEvent){
+    realEvent.contractGeneratedDate=new Date().toISOString().slice(0,10);
+    realEvent.contractFileName=fileName;
+    saveState();renderAll();
+    /* Sync dates back to form fields */
+    var gdEl=document.getElementById('eContractGeneratedDate'); if(gdEl) gdEl.value=realEvent.contractGeneratedDate;
+    var fnEl=document.getElementById('eContractFileName'); if(fnEl) fnEl.value=fileName;
+  }
+}
+/* Read the current contract form field values and return as a partial event object */
+function readContractFormOverrides(){
+  return {
+    contractBartenderCount: numeric(document.getElementById("eContractBartenderCount").value)||null,
+    contractBartenderRate:  numeric(document.getElementById("eContractBartenderRate").value)??null,
+    contractBartenderSetupHours: numeric(document.getElementById("eContractBartenderSetupHours").value)??null,
+    contractBarbackCount:   numeric(document.getElementById("eContractBarbackCount").value)||0,
+    contractBarbackRate:    numeric(document.getElementById("eContractBarbackRate").value)??null,
+    contractBarbackSetupHours: numeric(document.getElementById("eContractBarbackSetupHours").value)??null,
+    contractDepositPercent: numeric(document.getElementById("eContractDepositPercent").value)??null,
+    travelFee:              numeric(document.getElementById("eTravelFee").value)||0,
+    customContractTerms:    document.getElementById("eCustomContractTerms").value.trim(),
+  };
+}
+/* Sync quoted-rate fields → contract generator fields so the user sees pre-filled values */
+function syncQuotedToContractForm(){
+  var map={
+    eQBartenderCount:'eContractBartenderCount', eQBartenderRate:'eContractBartenderRate',
+    eQBartenderSetupHours:'eContractBartenderSetupHours', eQBarbackCount:'eContractBarbackCount',
+    eQBarbackRate:'eContractBarbackRate', eQBarbackSetupHours:'eContractBarbackSetupHours',
+    eQDepositPercent:'eContractDepositPercent', eQTravelFee:'eTravelFee', eQCustomTerms:'eCustomContractTerms'
+  };
+  Object.keys(map).forEach(function(src){
+    var srcEl=document.getElementById(src); var dstEl=document.getElementById(map[src]);
+    if(srcEl&&dstEl) dstEl.value=srcEl.value;
+  });
+}
 const chooseContractTemplateBtn=document.getElementById("chooseContractTemplateBtn");if(chooseContractTemplateBtn)chooseContractTemplateBtn.addEventListener("click",chooseContractTemplate);
 const clearContractTemplateBtn=document.getElementById("clearContractTemplateBtn");if(clearContractTemplateBtn)clearContractTemplateBtn.addEventListener("click",clearStoredContractTemplate);
 const contractTemplateInput=document.getElementById("contractTemplateInput");if(contractTemplateInput)contractTemplateInput.addEventListener("change",e=>handleContractTemplateUpload(e.target.files&&e.target.files[0]));
@@ -2775,11 +2846,16 @@ document.getElementById("generateContractBtn").addEventListener("click",()=>{
 });
 document.getElementById("generateContractFormBtn").addEventListener("click",()=>{
   try{
+    /* Save the event (quoted fields are now saved; contract builder fields are NOT) */
     const saved=saveEventPayloadFromForm({keepFormOpen:true});
-    if(saved){downloadWordContract(saved.id);return;}
-    /* Fallback: form save was suppressed (e.g. missing customer field) but event is already stored — generate directly */
-    if(editingEventId){downloadWordContract(editingEventId);return;}
-    alert("Please open or edit an event before generating a contract.");
+    const eventId=(saved&&saved.id)||editingEventId;
+    if(!eventId){alert("Please open or edit an event before generating a contract.");return;}
+    const baseEvent=(state.events||[]).find(e=>String(e.id||"")===String(eventId||""));
+    if(!baseEvent){alert("Event not found.");return;}
+    /* Build temp event: base state + whatever is currently in the contract form fields
+       (user may have tweaked them — those tweaks apply to this contract only, not saved) */
+    const tempEvent=Object.assign({},baseEvent,readContractFormOverrides());
+    downloadWordContractFromTempEvent(tempEvent);
   }catch(err){console.error("Contract generation failed",err);alert("Contract generation failed: "+(err&&err.message?err.message:err));}
 });
 document.getElementById("payAllBartendersBtn").addEventListener("click",()=>{
@@ -2866,7 +2942,7 @@ renderAll();ensureEditableContractFields();
     setTimeout(updateSummaryMetricsVisibility,60);
   }
   document.addEventListener("click",function(e){
-    const eventTab=e.target.closest(".event-form-tab");if(eventTab){e.preventDefault();activateEventFormSection(eventTab.dataset.eventFormSection);return;}
+    const eventTab=e.target.closest(".event-form-tab");if(eventTab){e.preventDefault();activateEventFormSection(eventTab.dataset.eventFormSection);if(eventTab.dataset.eventFormSection==='contractQuoteBuilderSection'&&typeof syncQuotedToContractForm==='function')syncQuotedToContractForm();return;}
     if(e.target&&e.target.id==="staffAssignmentVisibleAddBtn"){const event=getCurrentEvent();if(!event){alert("Select or edit an event first before adding staff.");return;}if(!Array.isArray(event.bartenderAssignments))event.bartenderAssignments=[];const first=(state.bartenders||[])[0]||{};event.bartenderAssignments.push({id:first.id||"",role:"Bartender",payType:first.defaultPayType||"hourly",rate:0,paid:false,actualStartTime:"",actualEndTime:"",breakMinutes:0,travelPay:0,expenseReimbursement:0,expenseNotes:""});renderVisibleStaffAssignmentPanel();return;}
     const remove=e.target.closest(".staff-visible-remove");if(remove){const event=getCurrentEvent();const idx=Number(remove.dataset.staffIndex);if(event&&Array.isArray(event.bartenderAssignments)&&Number.isFinite(idx)){event.bartenderAssignments.splice(idx,1);try{saveState();}catch(err){}renderVisibleStaffAssignmentPanel();}return;}
     const row=e.target.closest("[data-event-id], [data-id]");if(row){const id=row.getAttribute("data-event-id")||row.getAttribute("data-id");if(id&&(row.classList.contains("summary-item")||row.classList.contains("calendar-event")||row.closest("#summaryList")||row.closest("#eventsCalendarGrid"))){e.preventDefault();e.stopPropagation();openEventFormDirect(id);return;}}
