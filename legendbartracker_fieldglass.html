@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260625_082';
+  const BUILD='v20260625_084';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -5540,10 +5540,12 @@ renderAll();ensureEditableContractFields();
       var adCost      = parseFloat(ev.advertisingCost)||0;
       var totalCosts  = laborCost+eventCosts+adCost;
 
-      var grossProfit = revenue - totalCosts;
-      var netProfit   = collected - totalCosts;
-      var marginPct   = revenue>0 ? (grossProfit/revenue)*100 : 0;
-      var roiPct      = totalCosts>0 ? (grossProfit/totalCosts)*100 : 0;
+      /* Gross Profit = Quote − direct delivery costs (labor + COGS/event costs)
+         Net Profit   = Gross Profit − advertising/marketing spend              */
+      var grossProfit = revenue - laborCost - eventCosts;
+      var netProfit   = grossProfit - adCost;
+      var marginPct   = revenue>0 ? (netProfit/revenue)*100 : 0;
+      var roiPct      = totalCosts>0 ? (netProfit/totalCosts)*100 : 0;
 
       var marginColor = marginPct>=40 ? '#16a34a' : marginPct>=20 ? '#d97706' : '#dc2626';
       var barW   = Math.min(100,Math.max(0,marginPct));
