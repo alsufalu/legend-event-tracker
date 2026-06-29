@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260625_084';
+  const BUILD='v20260625_085';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -958,11 +958,16 @@ tr:hover td { background:var(--surface2); }
 
             <!-- Quote & costs -->
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin:0 0 8px;">Quote &amp; Costs</div>
-            <div class="row four" style="margin-bottom:18px;">
+            <div class="row four" style="margin-bottom:10px;">
               <div class="field-wrap"><label class="field-label" for="eQuote">Quotation amount</label><input id="eQuote" placeholder="0.00"></div>
               <div class="field-wrap"><label class="field-label" for="eCosts">Event costs (COGS)</label><input id="eCosts" placeholder="0.00"></div>
               <div class="field-wrap"><label class="field-label" for="eAdCost">Advertising cost</label><input id="eAdCost" placeholder="0.00"></div>
-              <div class="field-wrap"><label class="field-label" for="eBalanceDue">Balance due (auto)</label><input id="eBalanceDue" disabled></div>
+              <div class="field-wrap"><label class="field-label" for="eReimbursableExpenses">Reimbursable expenses</label><input id="eReimbursableExpenses" placeholder="0.00" title="Expenses to be reimbursed by the customer (added to balance due)"></div>
+            </div>
+            <div style="margin-bottom:18px;">
+              <label class="field-label" style="margin-bottom:4px;">Balance due (auto)</label>
+              <div id="eBalanceDue" style="font-size:20px;font-weight:700;color:var(--ink);padding:6px 0;">$0.00</div>
+              <div class="small" style="color:var(--ink3);">= Quotation + Reimbursable Expenses − Deposit Paid − Final Payment</div>
             </div>
 
             <!-- Deposit -->
@@ -1746,11 +1751,12 @@ function enrichedEvents() {
   const deletedIds = new Set(getDeletedEventIds());
   return (state.events || []).filter(e => e && !deletedIds.has(String(e.id))).map(e => {
     const quote = numeric(e.quotationAmount) || 0;
+    const reimb = numeric(e.reimbursableExpenses) || 0;
     const depositPaid = numeric(e.depositAmountPaid) || 0;
     const finalPaid = numeric(e.finalAmountPaid) || 0;
     const actualPaid = depositPaid + finalPaid;
     const eventRevenue = quote;
-    const actualBalance = Math.max(0, eventRevenue - actualPaid);
+    const actualBalance = Math.max(0, quote + reimb - actualPaid);
     const eventCostOnly = numeric(e.eventCosts) || 0;
     const adCost = numeric(e.advertisingCost) || 0;
     const labor = bartenderLaborCost(e);
@@ -2253,8 +2259,17 @@ function renderAll() {
 }
 function updateDurationField() { document.getElementById("eDuration").value = durationLabel(document.getElementById("eStartTime").value, document.getElementById("eEndTime").value); }
 function calculatedPaidFromForm() { return (numeric(document.getElementById("eDepositPaid").value) || 0) + (numeric(document.getElementById("eFinalPaid").value) || 0); }
-function calculatedBalanceFromForm() { return Math.max(0, ((numeric(document.getElementById("eQuote").value) || 0) + (numeric(document.getElementById("eCosts").value) || 0)) - calculatedPaidFromForm()); }
-function updateBalanceDueField() { const field = document.getElementById("eBalanceDue"); if (field) field.value = money(calculatedBalanceFromForm()); }
+function calculatedBalanceFromForm() {
+  var quote = numeric(document.getElementById("eQuote").value) || 0;
+  var reimb = numeric(document.getElementById("eReimbursableExpenses").value) || 0;
+  return Math.max(0, quote + reimb - calculatedPaidFromForm());
+}
+function updateBalanceDueField() {
+  var el = document.getElementById("eBalanceDue"); if (!el) return;
+  var bal = calculatedBalanceFromForm();
+  el.textContent = money(bal);
+  el.style.color = bal > 0 ? '#dc2626' : '#16a34a';
+}
 function calculateContractPricingFromForm() {
   const duration = calcDurationHours(document.getElementById("eStartTime").value, document.getElementById("eEndTime").value) || 0;
   const assignedBartenders = getCurrentAssignments().length || 0;
@@ -2310,7 +2325,7 @@ function clearEventForm() {
 }
 document.getElementById("eEndTime").addEventListener("input", () => { updateDurationField(); refreshStaffPayoutPreviews(); });
 document.getElementById("eStartTime").addEventListener("input", () => { updateDurationField(); refreshStaffPayoutPreviews(); });
-["eQuote","eDepositPaid","eFinalPaid"].forEach(id => document.getElementById(id).addEventListener("input", updateBalanceDueField));
+["eQuote","eDepositPaid","eFinalPaid","eReimbursableExpenses"].forEach(id => document.getElementById(id).addEventListener("input", updateBalanceDueField));
 ["eStaffOvertimeHours"].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener("input", refreshStaffPayoutPreviews); });
 ["eStartTime","eEndTime","eQTravelFee","eQDepositPercent","eQBartenderCount","eQBartenderRate","eQBartenderSetupHours","eQBarbackCount","eQBarbackRate","eQBarbackSetupHours"].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener("input", applyContractPricingToForm); });
 document.getElementById("eCustomer").addEventListener("change", () => {
@@ -2448,10 +2463,11 @@ function buildEventPayloadFromForm() {
   const finalPaid = numeric(document.getElementById("eFinalPaid").value) || 0;
   const quote = numeric(document.getElementById("eQuote").value) || 0;
   const totalPaid = depositPaid + finalPaid;
-  const balance = Math.max(0, quote - totalPaid);
+  const reimb = numeric(document.getElementById("eReimbursableExpenses").value) || 0;
+  const balance = Math.max(0, quote + reimb - totalPaid);
   const bartenderAssignments = getCurrentAssignments();
   const customerId = resolveEventCustomerId();
-  return { id: editingEventId || nextEventId(), eventName: document.getElementById("eName").value.trim(), customerId, status: document.getElementById("eStatus").value, eventType: document.getElementById("eEventType").value.trim(), date: document.getElementById("eDate").value, startTime: document.getElementById("eStartTime").value, endTime: document.getElementById("eEndTime").value, guestCount: numeric(document.getElementById("eGuests").value), venueName: document.getElementById("eVenueName").value.trim(), venueAddress: document.getElementById("eVenueAddress").value.trim(), barSetup: document.getElementById("eBarSetup").value, existingBar: document.getElementById("eBarSetup").value === "existing", bookingSite: document.getElementById("eBookingSite").value.trim(), quotationAmount: quote, depositRequired: numeric(document.getElementById("eDepositRequired").value), depositAmountPaid: depositPaid, depositDatePaid: document.getElementById("eDepositDate").value, depositPaidBy: document.getElementById("eDepositPaidBy").value.trim(), finalAmountPaid: finalPaid, finalAmountPaidDate: document.getElementById("eFinalPaidDate").value, finalAmountPaymentMethod: document.getElementById("eFinalMethod").value.trim(), contractSentDate: document.getElementById("eContractSentDate").value, staffOvertimeHours: numeric(document.getElementById("eStaffOvertimeHours").value) || 0, billClientExtraTime: false, extraTimeRate: 0, extraTimeBilled: 0, overtimeNotes: document.getElementById("eOvertimeNotes").value.trim(), quotedBartenderCount: numeric(document.getElementById("eQBartenderCount").value) || null, quotedBartenderRate: numeric(document.getElementById("eQBartenderRate").value) ?? null, quotedBartenderSetupHours: numeric(document.getElementById("eQBartenderSetupHours").value) ?? null, quotedBarbackCount: numeric(document.getElementById("eQBarbackCount").value) || 0, quotedBarbackRate: numeric(document.getElementById("eQBarbackRate").value) ?? null, quotedBarbackSetupHours: numeric(document.getElementById("eQBarbackSetupHours").value) ?? null, quotedDepositPercent: numeric(document.getElementById("eQDepositPercent").value) ?? null, quotedTravelFee: numeric(document.getElementById("eQTravelFee").value) || 0, quotedCustomTerms: document.getElementById("eQCustomTerms").value.trim(), contractGeneratedDate: document.getElementById("eContractGeneratedDate").value, contractSignedDate: document.getElementById("eContractSignedDate").value, contractFileName: document.getElementById("eContractFileName").value.trim(), location: document.getElementById("eLocation").value.trim(), description: document.getElementById("eDescription").value.trim(), latestUpdate: document.getElementById("eUpdate").value.trim(), followUpDate: document.getElementById("eFollowUpDate").value, followUpType: document.getElementById("eFollowUpType").value, followUpStatus: document.getElementById("eFollowUpStatus").value || "open", followUpCompletedDate: document.getElementById("eFollowUpCompletedDate").value, followUpNotes: document.getElementById("eFollowUpNotes").value.trim(), totalAmountPaid: totalPaid, balanceDue: balance, eventCosts: numeric(document.getElementById("eCosts").value) || 0, advertisingCost: numeric(document.getElementById("eAdCost").value) || 0, dateOfContact: document.getElementById("eDateOfContact").value || "", bartenderAssignments };
+  return { id: editingEventId || nextEventId(), eventName: document.getElementById("eName").value.trim(), customerId, status: document.getElementById("eStatus").value, eventType: document.getElementById("eEventType").value.trim(), date: document.getElementById("eDate").value, startTime: document.getElementById("eStartTime").value, endTime: document.getElementById("eEndTime").value, guestCount: numeric(document.getElementById("eGuests").value), venueName: document.getElementById("eVenueName").value.trim(), venueAddress: document.getElementById("eVenueAddress").value.trim(), barSetup: document.getElementById("eBarSetup").value, existingBar: document.getElementById("eBarSetup").value === "existing", bookingSite: document.getElementById("eBookingSite").value.trim(), quotationAmount: quote, depositRequired: numeric(document.getElementById("eDepositRequired").value), depositAmountPaid: depositPaid, depositDatePaid: document.getElementById("eDepositDate").value, depositPaidBy: document.getElementById("eDepositPaidBy").value.trim(), finalAmountPaid: finalPaid, finalAmountPaidDate: document.getElementById("eFinalPaidDate").value, finalAmountPaymentMethod: document.getElementById("eFinalMethod").value.trim(), contractSentDate: document.getElementById("eContractSentDate").value, staffOvertimeHours: numeric(document.getElementById("eStaffOvertimeHours").value) || 0, billClientExtraTime: false, extraTimeRate: 0, extraTimeBilled: 0, overtimeNotes: document.getElementById("eOvertimeNotes").value.trim(), quotedBartenderCount: numeric(document.getElementById("eQBartenderCount").value) || null, quotedBartenderRate: numeric(document.getElementById("eQBartenderRate").value) ?? null, quotedBartenderSetupHours: numeric(document.getElementById("eQBartenderSetupHours").value) ?? null, quotedBarbackCount: numeric(document.getElementById("eQBarbackCount").value) || 0, quotedBarbackRate: numeric(document.getElementById("eQBarbackRate").value) ?? null, quotedBarbackSetupHours: numeric(document.getElementById("eQBarbackSetupHours").value) ?? null, quotedDepositPercent: numeric(document.getElementById("eQDepositPercent").value) ?? null, quotedTravelFee: numeric(document.getElementById("eQTravelFee").value) || 0, quotedCustomTerms: document.getElementById("eQCustomTerms").value.trim(), contractGeneratedDate: document.getElementById("eContractGeneratedDate").value, contractSignedDate: document.getElementById("eContractSignedDate").value, contractFileName: document.getElementById("eContractFileName").value.trim(), location: document.getElementById("eLocation").value.trim(), description: document.getElementById("eDescription").value.trim(), latestUpdate: document.getElementById("eUpdate").value.trim(), followUpDate: document.getElementById("eFollowUpDate").value, followUpType: document.getElementById("eFollowUpType").value, followUpStatus: document.getElementById("eFollowUpStatus").value || "open", followUpCompletedDate: document.getElementById("eFollowUpCompletedDate").value, followUpNotes: document.getElementById("eFollowUpNotes").value.trim(), totalAmountPaid: totalPaid, balanceDue: balance, eventCosts: numeric(document.getElementById("eCosts").value) || 0, advertisingCost: numeric(document.getElementById("eAdCost").value) || 0, reimbursableExpenses: reimb, dateOfContact: document.getElementById("eDateOfContact").value || "", bartenderAssignments };
 }
 function saveEventPayloadFromForm(options = {}) {
   const payload = buildEventPayloadFromForm();
@@ -2553,7 +2569,7 @@ window.editEvent = function(id) {
   document.getElementById("eGuests").value=e.guestCount??""; document.getElementById("eVenueName").value=e.venueName||""; document.getElementById("eVenueAddress").value=e.venueAddress||"";
   document.getElementById("eBarSetup").value=normalizeBarSetup(e); document.getElementById("eBookingSite").value=e.bookingSite||"";
   document.getElementById("eQuote").value=e.quotationAmount??""; document.getElementById("eDepositRequired").value=e.depositRequired??""; document.getElementById("eDepositPaid").value=e.depositAmountPaid??"";
-  document.getElementById("eCosts").value=e.eventCosts??""; document.getElementById("eAdCost").value=e.advertisingCost??""; document.getElementById("eDepositDate").value=e.depositDatePaid||"";
+  document.getElementById("eCosts").value=e.eventCosts??""; document.getElementById("eAdCost").value=e.advertisingCost??""; document.getElementById("eReimbursableExpenses").value=e.reimbursableExpenses||""; document.getElementById("eDepositDate").value=e.depositDatePaid||"";
   document.getElementById("eDepositPaidBy").value=e.depositPaidBy||""; document.getElementById("eFinalPaid").value=e.finalAmountPaid??""; document.getElementById("eFinalPaidDate").value=e.finalAmountPaidDate||"";
   document.getElementById("eFinalMethod").value=e.finalAmountPaymentMethod||""; document.getElementById("eContractSentDate").value=e.contractSentDate||"";
   document.getElementById("eStaffOvertimeHours").value=eventStaffOvertimeHours(e)||""; document.getElementById("eOvertimeNotes").value=e.overtimeNotes||"";
