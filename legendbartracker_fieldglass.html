@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260625_085';
+  const BUILD='v20260629_086';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -2594,7 +2594,9 @@ window.editEvent = function(id) {
   renderBartenderSelect(e.bartenderAssignments||[]); ensureEditableContractFields(); updateDurationField(); updateBalanceDueField();
   switchTab("events"); if(typeof switchEventSubtab==="function") switchEventSubtab("form"); if(window.activateEventFormScreen) window.activateEventFormScreen("eventDetailsSection");
   const formPanel=document.querySelector('[data-event-panel="form"]'); if(formPanel) formPanel.scrollIntoView({behavior:"smooth",block:"start"});
-  // Highlight selected event in left panel
+  // Highlight selected event in left panel (new sidebar)
+  try{if(typeof window.renderEventListSidebar==="function") window.renderEventListSidebar();}catch(err){}
+  // Legacy summary-item highlight (kept for safety)
   document.querySelectorAll('.summary-item[data-event-id]').forEach(el=>el.classList.remove('active-event'));
   const activeEl=document.querySelector(`.summary-item[data-event-id="${CSS.escape(String(id))}"]`);
   if(activeEl){activeEl.classList.add('active-event');activeEl.scrollIntoView({behavior:'smooth',block:'nearest'});}
