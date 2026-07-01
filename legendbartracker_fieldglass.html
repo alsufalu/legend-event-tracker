@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260629_087';
+  const BUILD='v20260629_088';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1974,7 +1974,8 @@ function renderCustomers() {
 function bartenderPayoutSummary() {
   const summary = {};
   (state.bartenders || []).forEach(b => { summary[b.id] = { id:b.id, name:b.name || "Unnamed bartender", paid:0, unpaid:0, paidEvents:0, unpaidEvents:0 }; });
-  (state.events || []).forEach(event => {
+  const REPORT_STATUSES = ["booked","deciding","completed"];
+  (state.events || []).filter(ev => REPORT_STATUSES.includes(ev.status || "deciding")).forEach(event => {
     (event.bartenderAssignments || []).forEach(a => {
       if (!a.id) return;
       if (!summary[a.id]) summary[a.id] = { id:a.id, name:bartenderMap()[a.id]?.name || "Unknown bartender", paid:0, unpaid:0, paidEvents:0, unpaidEvents:0 };
@@ -1988,7 +1989,7 @@ function bartenderPayoutSummary() {
 function getBartenderEventRows(bartenderId) {
   const bmap = bartenderMap(); const cmap = customerMap();
   const targetId = String(bartenderId || ""); const rows = [];
-  enrichedEvents().forEach(event => {
+  enrichedEvents().filter(ev => ["booked","deciding","completed"].includes(ev.status || "deciding")).forEach(event => {
     (event.bartenderAssignments || []).forEach(a => {
       if (String(a.id || "") !== targetId) return;
       const customer = cmap[event.customerId] || {};
