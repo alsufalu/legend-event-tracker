@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260629_086';
+  const BUILD='v20260629_087';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1906,7 +1906,7 @@ function bartenderOptionHtml(assignment = {}) {
   const selectedPaymentMethod = assignment.paymentMethod || "";
   const selectedRole = assignment.role || "Bartender";
   const options = ['<option value="">Select staff</option>'].concat((state.bartenders || []).slice().sort((a,b)=>a.name.localeCompare(b.name)).map(b => `<option value="${b.id}" ${selectedId === b.id ? "selected" : ""}>${safe(b.name)}</option>`));
-  const roles = ["Bartender", "Barback", "Helper", "Server", "Setup Crew"];
+  const roles = ["Bartender", "Barback", "Helper", "Server", "Setup Crew", "Training"];
   return `
     <div class="staff-hours-grid">
       <div><label class="field-label">Staff</label><select class="bartender-assignment-select">${options.join("")}</select></div>
