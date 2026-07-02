@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260629_088';
+  const BUILD='v20260629_089';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -5827,7 +5827,7 @@ renderAll();ensureEditableContractFields();
             if(typeof getBartenderEventRows==='function'){
               getBartenderEventRows(b.id).forEach(function(r){
                 var s=(r.status||'').toLowerCase();
-                if(s==='completed'||s==='booked') allRows.push(r);
+                if(s==='completed'||s==='booked'||s==='deciding') allRows.push(r);
               });
             }
           });
@@ -5912,7 +5912,7 @@ renderAll();ensureEditableContractFields();
               if(typeof getBartenderEventRows==='function'){
                 getBartenderEventRows(b.id).forEach(function(r){
                   var s=(r.status||'').toLowerCase();
-                  if(s==='completed'||s==='booked') rows.push(r);
+                  if(s==='completed'||s==='booked'||s==='deciding') rows.push(r);
                 });
               }
             });
