@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260629_089';
+  const BUILD='v20260706_090';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1994,7 +1994,7 @@ function getBartenderEventRows(bartenderId) {
       if (String(a.id || "") !== targetId) return;
       const customer = cmap[event.customerId] || {};
       const payout = bartenderAssignmentCost(a, event);
-      rows.push({ bartenderId: targetId, bartenderName: bmap[targetId]?.name || "Unknown bartender", eventId: event.id || "", eventName: event.eventName || "", customerName: event.customerName || customer.name || "", customerPhone: customer.phone || "", status: event.status || "", date: event.date || "", startTime: event.startTime || "", endTime: event.endTime || "", durationLabel: assignmentHoursLabel(a, event) || event.durationLabel || durationLabel(event.startTime, event.endTime) || "", venueName: event.venueName || "", venueAddress: event.venueAddress || event.location || "", role: a.role || "Bartender", payType: a.payType || "hourly", rate: Number(a.rate || 0), hours: staffActualHours(a) ?? ((a.payType || "hourly") === "flat" ? null : bartenderBillableHours(event, a)), laborPay: bartenderBaseLaborCost(a, event), travelPay: Number(a.travelPay || 0), expenseReimbursement: Number(a.expenseReimbursement || 0), expenseNotes: a.expenseNotes || "", payout, paid: !!a.paid, paidDate: a.paidDate || "", paymentMethod: a.paymentMethod || "", quote: event.quotationAmount || 0, description: event.description || "", latestUpdate: event.latestUpdate || "" });
+      rows.push({ bartenderId: targetId, bartenderName: bmap[targetId]?.name || "Unknown bartender", eventId: event.id || "", eventName: event.eventName || "", customerName: event.customerName || customer.name || "", customerPhone: customer.phone || event.customerPhone || "", status: event.status || "", date: event.date || "", startTime: event.startTime || "", endTime: event.endTime || "", durationLabel: assignmentHoursLabel(a, event) || event.durationLabel || durationLabel(event.startTime, event.endTime) || "", venueName: event.venueName || "", venueAddress: event.venueAddress || event.location || "", role: a.role || "Bartender", payType: a.payType || "hourly", rate: Number(a.rate || 0), hours: staffActualHours(a) ?? ((a.payType || "hourly") === "flat" ? null : bartenderBillableHours(event, a)), laborPay: bartenderBaseLaborCost(a, event), travelPay: Number(a.travelPay || 0), expenseReimbursement: Number(a.expenseReimbursement || 0), expenseNotes: a.expenseNotes || "", payout, paid: !!a.paid, paidDate: a.paidDate || "", paymentMethod: a.paymentMethod || "", quote: event.quotationAmount || 0, description: event.description || "", latestUpdate: event.latestUpdate || "" });
     });
   });
   rows.sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.eventName || "").localeCompare(String(b.eventName || "")));
