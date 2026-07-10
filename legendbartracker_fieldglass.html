@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260706_090';
+  const BUILD='v20260706_091';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -717,6 +717,10 @@ tr:hover td { background:var(--surface2); }
     <button id="exportEventsCsvBtn">Export events CSV</button>
     <label class="buttonlike">Import backup<input id="importInput" type="file" accept=".json" style="display:none;"></label>
     <button id="resetBtn">Reset to original data</button>
+  </div>
+  <div class="topbar-right" style="display:flex;align-items:center;gap:8px;margin-left:auto;padding-left:12px;">
+    <span id="lbtCloudStatus" style="font-size:11px;color:rgba(255,255,255,.5);white-space:nowrap;">☁ Not signed in</span>
+    <button id="lbtSignOutBtn" style="display:none;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit;flex-shrink:0;" onclick="window.lbtSignOut&&window.lbtSignOut()">Sign Out</button>
   </div>
 </div>
 
@@ -5200,9 +5204,9 @@ renderAll();ensureEditableContractFields();
 
   function setCloudStatus(msg,ok){
     var el=document.getElementById('lbtCloudStatus');
-    if(!el) return;
-    el.textContent=msg;
-    el.style.color=ok===true?'#34d399':ok===false?'#f87171':'rgba(255,255,255,.5)';
+    if(el){ el.textContent=msg; el.style.color=ok===true?'#34d399':ok===false?'#f87171':'rgba(255,255,255,.5)'; }
+    var btn=document.getElementById('lbtSignOutBtn');
+    if(btn) btn.style.display=currentUser?'':'none';
   }
 
   function syncToCloud(){
@@ -5227,12 +5231,44 @@ renderAll();ensureEditableContractFields();
     try{
       setCloudStatus('☁ Loading…',null);
       var res=await sbClient.from(TABLE).select('data,updated_at').eq('id',currentUser.id).maybeSingle();
-      if(res.error||!res.data||!res.data.data){ setCloudStatus('☁ No cloud data',null); return false; }
+      if(res.error||!res.data||!res.data.data){
+        /* Cloud is empty — push local data up if we have any */
+        var localEvents=(state.events||[]).length;
+        if(localEvents>0){
+          setCloudStatus('☁ Uploading local data…',null);
+          try{
+            await sbClient.from(TABLE).upsert(
+              {id:currentUser.id,user_id:currentUser.id,data:JSON.parse(JSON.stringify(state)),updated_at:new Date().toISOString()},
+              {onConflict:'id'}
+            );
+            setCloudStatus('☁ Synced',true);
+          }catch(ex){ setCloudStatus('⚠ Upload failed',false); }
+        } else {
+          setCloudStatus('☁ No cloud data',null);
+        }
+        return false;
+      }
       var loaded=res.data.data;
-      Object.assign(state,loaded);
-      try{ localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); }catch(ex){}
-      setCloudStatus('☁ Synced',true);
-      return true;
+      /* Use cloud data if it has more events, otherwise keep local and push up */
+      var cloudEventCount=(loaded.events||[]).length;
+      var localEventCount=(state.events||[]).length;
+      if(cloudEventCount>=localEventCount){
+        Object.assign(state,loaded);
+        try{ localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); }catch(ex){}
+        setCloudStatus('☁ Synced',true);
+        return true;
+      } else {
+        /* Local has more data — push local up to cloud */
+        setCloudStatus('☁ Uploading local data…',null);
+        try{
+          await sbClient.from(TABLE).upsert(
+            {id:currentUser.id,user_id:currentUser.id,data:JSON.parse(JSON.stringify(state)),updated_at:new Date().toISOString()},
+            {onConflict:'id'}
+          );
+          setCloudStatus('☁ Synced',true);
+        }catch(ex){ setCloudStatus('⚠ Upload failed',false); }
+        return false;
+      }
     }catch(e){ setCloudStatus('⚠ Load failed',false); return false; }
   }
 
@@ -5248,6 +5284,8 @@ renderAll();ensureEditableContractFields();
   sbClient.auth.onAuthStateChange(function(event,session){
     currentUser=session?session.user:null;
     window._sbCurrentUser=currentUser;
+    var btn=document.getElementById('lbtSignOutBtn');
+    if(btn) btn.style.display=currentUser?'':'none';
     if(currentUser){
       showApp(); /* Show immediately, load data in background */
       setTimeout(function(){ try{ if(window.renderDashboard) window.renderDashboard(); }catch(ex){} }, 200);
@@ -5321,21 +5359,8 @@ renderAll();ensureEditableContractFields();
     await sbClient.auth.signOut();
   };
 
-  /* Add cloud status + sign out button to topbar */
-  setTimeout(function(){
-    var topbarRight=document.querySelector('.topbar-right');
-    if(!topbarRight) return;
-    var span=document.createElement('span');
-    span.id='lbtCloudStatus';
-    span.style.cssText='font-size:11px;color:rgba(255,255,255,.5);margin-right:6px;white-space:nowrap;';
-    span.textContent='☁ Connecting…';
-    topbarRight.prepend(span);
-    var btn=document.createElement('button');
-    btn.textContent='Sign Out';
-    btn.style.cssText='background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit;margin-left:6px;flex-shrink:0;';
-    btn.onclick=window.lbtSignOut;
-    topbarRight.appendChild(btn);
-  },600);
+  /* Cloud status + sign out button are now hardcoded in topbar HTML — no injection needed */
+  setTimeout(function(){ setCloudStatus(currentUser?'☁ Connecting…':'☁ Not signed in', null); },100);
 })();
 
 /* ── Follow-up Report Patch: inline-editable, one row per follow-up ── */
