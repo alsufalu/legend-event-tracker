@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260706_091';
+  const BUILD='v20260712_093';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1565,7 +1565,7 @@ function normalizeLoadedState(data) {
     e.bartenderAssignments = e.bartenderAssignments.map(a => ({
       role: "Bartender", actualStartTime: "", actualEndTime: "", breakMinutes: 0,
       actualHours: "", clockedOutAt: "", travelPay: 0, expenseReimbursement: 0,
-      expenseNotes: "", paidDate: "", paymentMethod: "", ...a
+      expenseNotes: "", tips: 0, paidDate: "", paymentMethod: "", ...a
     }));
   });
   return normalized;
@@ -1676,10 +1676,11 @@ function getCurrentAssignments() {
     const travelPay = Number(row.querySelector(".bartender-travel-pay")?.value || 0);
     const expenseReimbursement = Number(row.querySelector(".bartender-expense-reimbursement")?.value || 0);
     const expenseNotes = row.querySelector(".bartender-expense-notes")?.value || "";
+    const tips = Number(row.querySelector(".bartender-tips")?.value || 0);
     const paid = row.querySelector(".bartender-paid")?.checked || false;
     const paidDate = row.querySelector(".bartender-paid-date")?.value || "";
     const paymentMethod = row.querySelector(".bartender-payment-method")?.value || "";
-    return id ? {id, role, payType, rate, actualStartTime, actualEndTime, breakMinutes, actualHours, travelPay, expenseReimbursement, expenseNotes, paid, paidDate, paymentMethod} : null;
+    return id ? {id, role, payType, rate, actualStartTime, actualEndTime, breakMinutes, actualHours, travelPay, expenseReimbursement, expenseNotes, tips, paid, paidDate, paymentMethod} : null;
   }).filter(Boolean);
 }
 function calcActualStaffHours(start, end, breakMinutes = 0) {
@@ -1709,7 +1710,10 @@ function bartenderBaseLaborCost(a, event) {
   return rate * bartenderBillableHours(event, a);
 }
 function bartenderExtraStaffPay(a) {
-  return (Number(a.travelPay || 0) || 0) + (Number(a.expenseReimbursement || 0) || 0);
+  return (Number(a.travelPay || 0) || 0) + (Number(a.expenseReimbursement || 0) || 0) + (Number(a.tips || 0) || 0);
+}
+function eventTipTotal(event) {
+  return (event.bartenderAssignments || []).reduce(function(s,a){ return s + (Number(a.tips||0)||0); }, 0);
 }
 function bartenderAssignmentCost(a, event) {
   return bartenderBaseLaborCost(a, event) + bartenderExtraStaffPay(a);
@@ -1923,6 +1927,7 @@ function bartenderOptionHtml(assignment = {}) {
       <div><label class="field-label">Actual hrs</label><input type="number" min="0" step="0.25" class="bartender-actual-hours" value="${safe(assignment.actualHours ?? "")}" placeholder="Auto"></div>
       <div><label class="field-label">Travel pay</label><input type="number" min="0" step="1" class="bartender-travel-pay" value="${safe(assignment.travelPay ?? 0)}" placeholder="0"></div>
       <div><label class="field-label">Expenses</label><input type="number" min="0" step="1" class="bartender-expense-reimbursement" value="${safe(assignment.expenseReimbursement ?? 0)}" placeholder="0"></div>
+      <div><label class="field-label">Tips</label><input type="number" min="0" step="1" class="bartender-tips" value="${safe(assignment.tips ?? 0)}" placeholder="0" title="Tips paid to this employee — pass-through, not counted as profit"></div>
       <div><label class="field-label">Expense notes</label><input class="bartender-expense-notes" value="${escapeAttr(assignment.expenseNotes || "")}" placeholder="Gas, ice, supplies"></div>
       <div><label class="field-label">Payout</label><input class="bartender-payout-preview" disabled value="$0"></div>
       <div><label class="field-label">Paid</label><label style="font-size:12px; display:block; padding-top:10px;"><input type="checkbox" class="bartender-paid" ${selectedPaid ? "checked" : ""}> Paid</label></div>
@@ -1998,7 +2003,7 @@ function getBartenderEventRows(bartenderId) {
       if (String(a.id || "") !== targetId) return;
       const customer = cmap[event.customerId] || {};
       const payout = bartenderAssignmentCost(a, event);
-      rows.push({ bartenderId: targetId, bartenderName: bmap[targetId]?.name || "Unknown bartender", eventId: event.id || "", eventName: event.eventName || "", customerName: event.customerName || customer.name || "", customerPhone: customer.phone || event.customerPhone || "", status: event.status || "", date: event.date || "", startTime: event.startTime || "", endTime: event.endTime || "", durationLabel: assignmentHoursLabel(a, event) || event.durationLabel || durationLabel(event.startTime, event.endTime) || "", venueName: event.venueName || "", venueAddress: event.venueAddress || event.location || "", role: a.role || "Bartender", payType: a.payType || "hourly", rate: Number(a.rate || 0), hours: staffActualHours(a) ?? ((a.payType || "hourly") === "flat" ? null : bartenderBillableHours(event, a)), laborPay: bartenderBaseLaborCost(a, event), travelPay: Number(a.travelPay || 0), expenseReimbursement: Number(a.expenseReimbursement || 0), expenseNotes: a.expenseNotes || "", payout, paid: !!a.paid, paidDate: a.paidDate || "", paymentMethod: a.paymentMethod || "", quote: event.quotationAmount || 0, description: event.description || "", latestUpdate: event.latestUpdate || "" });
+      rows.push({ bartenderId: targetId, bartenderName: bmap[targetId]?.name || "Unknown bartender", eventId: event.id || "", eventName: event.eventName || "", customerName: event.customerName || customer.name || "", customerPhone: customer.phone || event.customerPhone || "", status: event.status || "", date: event.date || "", startTime: event.startTime || "", endTime: event.endTime || "", durationLabel: assignmentHoursLabel(a, event) || event.durationLabel || durationLabel(event.startTime, event.endTime) || "", venueName: event.venueName || "", venueAddress: event.venueAddress || event.location || "", role: a.role || "Bartender", payType: a.payType || "hourly", rate: Number(a.rate || 0), hours: staffActualHours(a) ?? ((a.payType || "hourly") === "flat" ? null : bartenderBillableHours(event, a)), laborPay: bartenderBaseLaborCost(a, event), travelPay: Number(a.travelPay || 0), expenseReimbursement: Number(a.expenseReimbursement || 0), expenseNotes: a.expenseNotes || "", tips: Number(a.tips || 0), payout, paid: !!a.paid, paidDate: a.paidDate || "", paymentMethod: a.paymentMethod || "", quote: event.quotationAmount || 0, description: event.description || "", latestUpdate: event.latestUpdate || "" });
     });
   });
   rows.sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.eventName || "").localeCompare(String(b.eventName || "")));
@@ -5572,14 +5577,16 @@ renderAll();ensureEditableContractFields();
       }
 
       var revenue   = parseFloat(ev.quotationAmount)||0;
+      var reimb     = parseFloat(ev.reimbursableExpenses)||0;
       var deposit   = parseFloat(ev.depositAmountPaid)||0;
       var finalPaid = parseFloat(ev.finalAmountPaid)||0;
       var collected = deposit+finalPaid;
-      var balance   = Math.max(0, revenue-collected);
+      var balance   = Math.max(0, revenue+reimb-collected);
 
       var laborCost   = (typeof bartenderLaborCost==='function') ? bartenderLaborCost(ev) : 0;
       var laborPaid2  = (typeof bartenderPaidAmount==='function') ? bartenderPaidAmount(ev) : 0;
       var laborUnpaid = laborCost - laborPaid2;
+      var tipTotal    = (typeof eventTipTotal==='function') ? eventTipTotal(ev) : 0;
       var eventCosts  = parseFloat(ev.eventCosts)||0;
       var adCost      = parseFloat(ev.advertisingCost)||0;
       var totalCosts  = laborCost+eventCosts+adCost;
@@ -5614,6 +5621,7 @@ renderAll();ensureEditableContractFields();
             card('Amount Collected',money2(collected),balance>0?V:VG)+
             card('Balance Due',money2(balance),balance>0?VR:V)+
           '</div>'+
+          (reimb>0?'<hr style="'+HR+'"><div style="'+G2+'">'+card('Reimbursable Expenses',money2(reimb),'font-size:15px;font-weight:600;color:var(--ink2);')+'<div class="small" style="color:var(--ink3);padding-top:18px;">Added to balance due · not counted as revenue or profit</div></div>':'')+
           (deposit||finalPaid?'<hr style="'+HR+'"><div style="'+G2+'">'+card('Deposit',money2(deposit))+card('Final Payment',money2(finalPaid))+'</div>':'')+
         '</div>'+
         '<div style="'+CARD+'">'+head('Costs')+
@@ -5622,6 +5630,7 @@ renderAll();ensureEditableContractFields();
             card('Event Costs (COGS)',money2(eventCosts))+
             card('Advertising',money2(adCost))+
           '</div>'+
+          (tipTotal>0?'<hr style="'+HR+'"><div style="'+G2+'">'+card('Tips Paid Out',money2(tipTotal),'font-size:15px;font-weight:600;color:var(--ink2);')+'<div class="small" style="color:var(--ink3);padding-top:18px;">Pass-through to employees · included in Employee Labor · reduces profit</div></div>':'')+
           '<hr style="'+HR+'">'+
           '<div style="'+G3+'">'+
             card('Total Costs',money2(totalCosts),'font-size:18px;font-weight:700;color:#b45309;')+

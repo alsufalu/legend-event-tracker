@@ -391,6 +391,7 @@ function bartenderAssignmentCost(a, ev) {
   const rate = Number(a.rate||0);
   const travel = Number(a.travelPay||0);
   const expense = Number(a.expenseReimbursement||0);
+  const tips = Number(a.tips||0);
   let labor = 0;
   if ((a.payType||'hourly')==='flat') {
     labor = rate;
@@ -405,18 +406,23 @@ function bartenderAssignmentCost(a, ev) {
     const otRate = Number(a.overtimeRate||rate*1.5);
     labor = rate*Math.max(0,hrs-otHrs)+otRate*otHrs;
   }
-  return labor+travel+expense;
+  return labor+travel+expense+tips;
+}
+function eventTipTotal(ev) {
+  return (ev.bartenderAssignments||[]).reduce((s,a)=>s+(Number(a.tips||0)||0),0);
 }
 
 function eventFinancials(ev) {
   const quote = parseFloat(ev.quotationAmount)||0;
+  const reimb = parseFloat(ev.reimbursableExpenses)||0;
   const deposit = parseFloat(ev.depositAmountPaid)||0;
   const final = parseFloat(ev.finalAmountPaid)||0;
   const collected = deposit+final;
-  const balance = Math.max(0,quote-collected);
+  const balance = Math.max(0,quote+reimb-collected);
   const staffCost = (ev.bartenderAssignments||[]).reduce((s,a)=>s+bartenderAssignmentCost(a,ev),0);
+  const tips = eventTipTotal(ev);
   const profit = collected-staffCost;
-  return { quote, deposit, final, collected, balance, staffCost, profit };
+  return { quote, reimb, deposit, final, collected, balance, staffCost, tips, profit };
 }
 
 function todayStr() { return new Date().toISOString().slice(0,10); }
@@ -801,13 +807,11 @@ function openEventDetail(id) {
       <div class="detail-row"><span class="detail-lbl">Date</span><span class="detail-val">${fmtDate(ev.date)}</span></div>
       ${ev.startTime?`<div class="detail-row"><span class="detail-lbl">Time</span><span class="detail-val">${safe(ev.startTime)}${ev.endTime?' – '+safe(ev.endTime):''}</span></div>`:''}
       <div class="detail-row"><span class="detail-lbl">Status</span><span class="detail-val"><span class="pill ${pillClass(ev.status)}">${safe(ev.status||'booked')}</span></span></div>
-      <div class="detail-row"><span class="detail-lbl">Customer</span><span class="detail-val">
-        ${safe(cust.name||'Unassigned')}
-        ${cust.phone?` · <a href="tel:${safe(cust.phone)}">${safe(fmtPhone(cust.phone))}</a>`:''}
-      </span></div>
+      <div class="detail-row"><span class="detail-lbl">Customer</span><span class="detail-val">${safe(cust.name||'Unassigned')}</span></div>
+      ${cust.phone?`<div class="detail-row"><span class="detail-lbl">Phone</span><span class="detail-val"><a href="tel:${safe(cust.phone)}" style="color:var(--primary);text-decoration:none;">${safe(fmtPhone(cust.phone))}</a></span></div>`:''}
       ${(ev.category||ev.eventType)?`<div class="detail-row"><span class="detail-lbl">Category</span><span class="detail-val">${safe(ev.category||ev.eventType)}</span></div>`:''}
       ${ev.venueName||ev.location?`<div class="detail-row"><span class="detail-lbl">Venue</span><span class="detail-val">${safe(ev.venueName||ev.location||'')}</span></div>`:''}
-      ${ev.venueAddress?`<div class="detail-row"><span class="detail-lbl">Address</span><span class="detail-val">${safe(ev.venueAddress)}</span></div>`:''}
+      ${ev.venueAddress?`<div class="detail-row"><span class="detail-lbl">Address</span><span class="detail-val"><a href="https://maps.apple.com/?q=${encodeURIComponent(ev.venueAddress)}" style="color:var(--primary);text-decoration:none;">${safe(ev.venueAddress)}</a></span></div>`:''}
       ${ev.guestCount?`<div class="detail-row"><span class="detail-lbl">Guests</span><span class="detail-val">${safe(ev.guestCount)}</span></div>`:''}
     </div>
   </div>`;
@@ -816,9 +820,11 @@ function openEventDetail(id) {
   html += `<div class="section"><div class="section-hdr">Financials</div>
     <div class="detail-list">
       <div class="detail-row"><span class="detail-lbl">Quote</span><span class="detail-val">${money(fin.quote)}</span></div>
+      ${fin.reimb>0?`<div class="detail-row"><span class="detail-lbl">Reimbursable</span><span class="detail-val">${money(fin.reimb)}</span></div>`:''}
       <div class="detail-row"><span class="detail-lbl">Collected</span><span class="detail-val">${money(fin.collected)}</span></div>
       <div class="detail-row"><span class="detail-lbl">Balance Due</span><span class="detail-val ${fin.balance>0?'money-negative':''}">${money(fin.balance)}</span></div>
       <div class="detail-row"><span class="detail-lbl">Staff Cost</span><span class="detail-val">${money(fin.staffCost)}</span></div>
+      ${fin.tips>0?`<div class="detail-row"><span class="detail-lbl">Tips Paid Out</span><span class="detail-val">${money(fin.tips)} <span style="font-size:11px;color:var(--label2);">pass-through</span></span></div>`:''}
       <div class="detail-row"><span class="detail-lbl">Net Profit</span><span class="detail-val ${fin.profit>=0?'money-positive':'money-negative'}">${money(fin.profit)}</span></div>
     </div>
   </div>`;
@@ -1415,10 +1421,10 @@ function openReport(id) {
     (state.bartenders||[]).forEach(b => {
       (state.events||[]).filter(e=>!e.deleted).forEach(ev => {
         const s=(ev.status||'').toLowerCase();
-        if(s!=='completed'&&s!=='booked') return;
+        if(s!=='completed'&&s!=='booked'&&s!=='deciding') return;
         const a=(ev.bartenderAssignments||[]).find(a=>a.id===b.id);
         if(!a) return;
-        rows.push({ name:b.name||'', evName:ev.eventName||'', date:ev.date||'', start:ev.startTime||'', end:ev.endTime||'', status:ev.status||'', cost:bartenderAssignmentCost(a,ev), paid:a.paid, evId:ev.id, role:a.role||'Bartender', laborPay:0, travelPay:Number(a.travelPay||0), expense:Number(a.expenseReimbursement||0) });
+        rows.push({ name:b.name||'', evName:ev.eventName||'', date:ev.date||'', start:ev.startTime||'', end:ev.endTime||'', status:ev.status||'', cost:bartenderAssignmentCost(a,ev), paid:a.paid, evId:ev.id, role:a.role||'Bartender', laborPay:0, travelPay:Number(a.travelPay||0), expense:Number(a.expenseReimbursement||0), tips:Number(a.tips||0) });
       });
     });
     rows.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
