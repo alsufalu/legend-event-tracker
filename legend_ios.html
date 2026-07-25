@@ -1075,6 +1075,23 @@ function openEditEvent(id) {
     </div>
   </div>`;
 
+  html += `<div class="form-section"><div class="form-section-label">Quoted Rates</div>
+    <div class="form-group">
+      <div class="form-row"><label class="form-lbl"># Bartenders</label><input class="form-inp" id="fe_bartCount" type="number" min="0" step="1" placeholder="1" value="${safe(ev.quotedBartenderCount??'')}"></div>
+      <div class="form-row"><label class="form-lbl">Bartender Rate ($/hr)</label><input class="form-inp" id="fe_bartRate" type="number" min="0" step="1" placeholder="70" value="${safe(ev.quotedBartenderRate??'')}"></div>
+      <div class="form-row"><label class="form-lbl">Bartender Setup Hrs</label><input class="form-inp" id="fe_bartSetup" type="number" min="0" step="0.5" placeholder="1" value="${safe(ev.quotedBartenderSetupHours??'')}"></div>
+      <div class="form-row"><label class="form-lbl"># Barbacks</label><input class="form-inp" id="fe_bbCount" type="number" min="0" step="1" placeholder="0" value="${safe(ev.quotedBarbackCount??'')}"></div>
+      <div class="form-row"><label class="form-lbl">Barback Rate ($/hr)</label><input class="form-inp" id="fe_bbRate" type="number" min="0" step="1" placeholder="25" value="${safe(ev.quotedBarbackRate??'')}"></div>
+      <div class="form-row"><label class="form-lbl">Barback Setup Hrs</label><input class="form-inp" id="fe_bbSetup" type="number" min="0" step="0.5" placeholder="1" value="${safe(ev.quotedBarbackSetupHours??'')}"></div>
+      <div class="form-row"><label class="form-lbl">Travel Fee ($)</label><input class="form-inp" id="fe_travelFee" type="number" min="0" step="1" placeholder="0" value="${safe(ev.quotedTravelFee??'')}"></div>
+      <div class="form-row"><label class="form-lbl">Deposit %</label><input class="form-inp" id="fe_depPct" type="number" min="0" max="100" step="1" placeholder="30" value="${safe(ev.quotedDepositPercent??'')}"></div>
+      <div class="form-row" style="border-bottom:none;flex-direction:column;gap:8px;">
+        <button onclick="mobileRecalcQuote('${safe(id||'')}',${JSON.stringify(ev.startTime||'')},${JSON.stringify(ev.endTime||'')})" style="width:100%;padding:13px;background:var(--primary);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;">⟳ Recalculate Quotation Amount</button>
+        <div id="fe_recalcBreakdown" style="font-size:12px;color:var(--label2);line-height:1.7;display:none;padding:4px 0;"></div>
+      </div>
+    </div>
+  </div>`;
+
   // Staff assignments
   const assignments = ev.bartenderAssignments||[];
   html += `<div class="form-section"><div class="form-section-label">Staff Assignments</div>`;
@@ -1151,6 +1168,14 @@ function saveEventForm(id) {
     quotationAmount: document.getElementById('fe_quote').value,
     depositAmountPaid: document.getElementById('fe_deposit').value,
     finalAmountPaid: document.getElementById('fe_final').value,
+    quotedBartenderCount: Number(document.getElementById('fe_bartCount').value)||null,
+    quotedBartenderRate: Number(document.getElementById('fe_bartRate').value)||null,
+    quotedBartenderSetupHours: Number(document.getElementById('fe_bartSetup').value)||null,
+    quotedBarbackCount: Number(document.getElementById('fe_bbCount').value)||0,
+    quotedBarbackRate: Number(document.getElementById('fe_bbRate').value)||null,
+    quotedBarbackSetupHours: Number(document.getElementById('fe_bbSetup').value)||null,
+    quotedTravelFee: Number(document.getElementById('fe_travelFee').value)||0,
+    quotedDepositPercent: Number(document.getElementById('fe_depPct').value)||null,
     description: document.getElementById('fe_notes').value,
     latestUpdate: document.getElementById('fe_update').value,
     bartenderAssignments: existingAssignments,
@@ -1193,6 +1218,57 @@ function removeAssignment(eventId, bartId, idx) {
     if (ev) ev.bartenderAssignments = (ev.bartenderAssignments||[]).filter((_,i)=>String(i)!==String(idx));
   }
   openEditEvent(eventId&&eventId!=='new'?eventId:null);
+}
+
+function mobileRecalcQuote(eventId, startTime, endTime) {
+  // Try to get times from the event form first, fall back to passed values
+  const start = document.getElementById('fe_start')?.value || startTime || '';
+  const end   = document.getElementById('fe_end')?.value   || endTime   || '';
+  let duration = 0;
+  if (start && end) {
+    const [sh,sm] = start.split(':').map(Number);
+    const [eh,em] = end.split(':').map(Number);
+    duration = Math.max(0, (eh*60+em - sh*60-sm) / 60);
+  }
+  const bartCount  = Number(document.getElementById('fe_bartCount').value)  || 0;
+  const bartRate   = Number(document.getElementById('fe_bartRate').value)   || 0;
+  const bartSetup  = Number(document.getElementById('fe_bartSetup').value)  || 0;
+  const bbCount    = Number(document.getElementById('fe_bbCount').value)    || 0;
+  const bbRate     = Number(document.getElementById('fe_bbRate').value)     || 0;
+  const bbSetup    = Number(document.getElementById('fe_bbSetup').value)    || 0;
+  const travelFee  = Number(document.getElementById('fe_travelFee').value)  || 0;
+  const depPct     = Number(document.getElementById('fe_depPct').value)     || 30;
+
+  const lines = [];
+  let total = 0;
+
+  if (!duration) lines.push('⚠ Enter start & end time above to include event hours.');
+
+  if (bartCount > 0 && bartRate > 0) {
+    const hrs = duration + bartSetup;
+    const sub = bartCount * hrs * bartRate;
+    lines.push(`${bartCount} bartender${bartCount>1?'s':''} × $${bartRate}/hr × ${hrs} hrs${bartSetup>0?' ('+duration+' event + '+bartSetup+' setup)':''} = $${sub.toFixed(2)}`);
+    total += sub;
+  }
+  if (bbCount > 0 && bbRate > 0) {
+    const hrs = duration + bbSetup;
+    const sub = bbCount * hrs * bbRate;
+    lines.push(`${bbCount} barback${bbCount>1?'s':''} × $${bbRate}/hr × ${hrs} hrs${bbSetup>0?' ('+duration+' event + '+bbSetup+' setup)':''} = $${sub.toFixed(2)}`);
+    total += sub;
+  }
+  if (travelFee > 0) { lines.push(`Travel fee = $${travelFee.toFixed(2)}`); total += travelFee; }
+
+  if (total > 0) {
+    lines.push(`Total = $${total.toFixed(2)}`);
+    document.getElementById('fe_quote').value = total.toFixed(2);
+    if (depPct > 0) {
+      const dep = Math.round(total * depPct / 100 * 100) / 100;
+      lines.push(`Deposit (${depPct}%) = $${dep.toFixed(2)}`);
+    }
+  }
+
+  const bd = document.getElementById('fe_recalcBreakdown');
+  if (bd) { bd.style.display = 'block'; bd.innerHTML = lines.map(l=>`<div>${safe(l)}</div>`).join(''); }
 }
 
 // ─── Customer Detail ──────────────────────────────────────

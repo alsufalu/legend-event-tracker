@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260712_093';
+  const BUILD='v20260712_094';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1009,6 +1009,13 @@ tr:hover td { background:var(--surface2); }
             <div class="field-wrap">
               <label class="field-label" for="eQCustomTerms">Custom contract notes / terms</label>
               <textarea id="eQCustomTerms" placeholder="Optional notes or special terms to include in the contract"></textarea>
+            </div>
+
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+              <div class="buttonbar" style="margin-bottom:8px;">
+                <button type="button" onclick="recalcQuoteFromRates()" style="background:var(--accent);color:#fff;font-weight:600;padding:8px 18px;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-family:inherit;">⟳ Recalculate Quotation Amount</button>
+              </div>
+              <div id="recalcBreakdown" class="small" style="color:var(--ink3);line-height:1.6;display:none;"></div>
             </div>
 
           </div>
@@ -2309,6 +2316,54 @@ function applyContractPricingToForm() {
   const quoteForDeposit = numeric(quoteField.value) || pricing.total || 0;
   if (quoteForDeposit > 0) { const depositPercent = pricing.depositPercent ?? 30; depositField.value = String(Math.round((quoteForDeposit * depositPercent / 100) * 100) / 100); }
   updateBalanceDueField(); return pricing;
+}
+function recalcQuoteFromRates() {
+  const duration = calcDurationHours(document.getElementById("eStartTime").value, document.getElementById("eEndTime").value) || 0;
+  const bartenderCount = numeric(document.getElementById("eQBartenderCount").value) || 0;
+  const bartenderRate = numeric(document.getElementById("eQBartenderRate").value) || 0;
+  const bartenderSetupHours = numeric(document.getElementById("eQBartenderSetupHours").value) || 0;
+  const barbackCount = numeric(document.getElementById("eQBarbackCount").value) || 0;
+  const barbackRate = numeric(document.getElementById("eQBarbackRate").value) || 0;
+  const barbackSetupHours = numeric(document.getElementById("eQBarbackSetupHours").value) || 0;
+  const travelFee = numeric(document.getElementById("eQTravelFee").value) || 0;
+  const depositPercent = numeric(document.getElementById("eQDepositPercent").value) ?? 30;
+
+  const lines = [];
+  let total = 0;
+
+  if (!duration) { lines.push('⚠ Event start/end time required to calculate event hours.'); }
+
+  const bartLaborHrs = duration + bartenderSetupHours;
+  const bartTotal = bartenderCount > 0 && bartenderRate > 0 ? bartenderCount * bartLaborHrs * bartenderRate : 0;
+  if (bartenderCount > 0 && bartenderRate > 0) {
+    lines.push(`${bartenderCount} bartender${bartenderCount>1?'s':''} × $${bartenderRate}/hr × ${bartLaborHrs} hrs${bartenderSetupHours>0?' ('+duration+' event + '+bartenderSetupHours+' setup)':''} = $${bartTotal.toFixed(2)}`);
+    total += bartTotal;
+  }
+
+  const bbLaborHrs = duration + barbackSetupHours;
+  const bbTotal = barbackCount > 0 && barbackRate > 0 ? barbackCount * bbLaborHrs * barbackRate : 0;
+  if (barbackCount > 0 && barbackRate > 0) {
+    lines.push(`${barbackCount} barback${barbackCount>1?'s':''} × $${barbackRate}/hr × ${bbLaborHrs} hrs${barbackSetupHours>0?' ('+duration+' event + '+barbackSetupHours+' setup)':''} = $${bbTotal.toFixed(2)}`);
+    total += bbTotal;
+  }
+
+  if (travelFee > 0) { lines.push(`Travel fee = $${travelFee.toFixed(2)}`); total += travelFee; }
+
+  if (total > 0) {
+    lines.push(`Total = $${total.toFixed(2)}`);
+    document.getElementById("eQuote").value = total.toFixed(2);
+    updateBalanceDueField();
+    if (depositPercent > 0) {
+      const dep = Math.round(total * depositPercent / 100 * 100) / 100;
+      const depField = document.getElementById("eDepositRequired");
+      if (depField) depField.value = dep.toFixed(2);
+      lines.push(`Deposit (${depositPercent}%) = $${dep.toFixed(2)} → set in Deposit Required`);
+    }
+  }
+
+  const bd = document.getElementById("recalcBreakdown");
+  bd.style.display = 'block';
+  bd.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
 }
 function clearCustomerForm() { editingCustomerId = null; document.getElementById("cName").value = ""; document.getElementById("cPhone").value = ""; document.getElementById("cNotes").value = ""; }
 function clearBartenderForm() { editingBartenderId = null; document.getElementById("bName").value = ""; document.getElementById("bPhone").value = ""; document.getElementById("bPayType").value = "hourly"; document.getElementById("bNotes").value = ""; }
