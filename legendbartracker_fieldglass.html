@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260712_094';
+  const BUILD='v20260712_095';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -5275,12 +5275,15 @@ renderAll();ensureEditableContractFields();
     _syncTimer=setTimeout(async function(){
       try{
         setCloudStatus('☁ Syncing…',null);
+        var now=new Date().toISOString();
         var snap=JSON.parse(JSON.stringify(state));
+        snap._updatedAt=now;
         var res=await sbClient.from(TABLE).upsert(
-          {id:currentUser.id,user_id:currentUser.id,data:snap,updated_at:new Date().toISOString()},
+          {id:currentUser.id,user_id:currentUser.id,data:snap,updated_at:now},
           {onConflict:'id'}
         );
         if(res.error) throw res.error;
+        state._updatedAt=now;
         setCloudStatus('☁ Synced',true);
       }catch(e){ setCloudStatus('⚠ Sync failed',false); }
     },1500);
@@ -5293,14 +5296,16 @@ renderAll();ensureEditableContractFields();
       var res=await sbClient.from(TABLE).select('data,updated_at').eq('id',currentUser.id).maybeSingle();
       if(res.error||!res.data||!res.data.data){
         /* Cloud is empty — push local data up if we have any */
-        var localEvents=(state.events||[]).length;
-        if(localEvents>0){
+        if((state.events||[]).length>0){
           setCloudStatus('☁ Uploading local data…',null);
           try{
+            var now=new Date().toISOString();
+            var snap=JSON.parse(JSON.stringify(state)); snap._updatedAt=now;
             await sbClient.from(TABLE).upsert(
-              {id:currentUser.id,user_id:currentUser.id,data:JSON.parse(JSON.stringify(state)),updated_at:new Date().toISOString()},
+              {id:currentUser.id,user_id:currentUser.id,data:snap,updated_at:now},
               {onConflict:'id'}
             );
+            state._updatedAt=now;
             setCloudStatus('☁ Synced',true);
           }catch(ex){ setCloudStatus('⚠ Upload failed',false); }
         } else {
@@ -5309,22 +5314,26 @@ renderAll();ensureEditableContractFields();
         return false;
       }
       var loaded=res.data.data;
-      /* Use cloud data if it has more events, otherwise keep local and push up */
-      var cloudEventCount=(loaded.events||[]).length;
-      var localEventCount=(state.events||[]).length;
-      if(cloudEventCount>=localEventCount){
+      /* Timestamp-based conflict resolution — newest wins */
+      var cloudTs=res.data.updated_at ? new Date(res.data.updated_at).getTime() : 0;
+      var localTs=state._updatedAt ? new Date(state._updatedAt).getTime() : 0;
+      if(cloudTs>=localTs){
+        /* Cloud is same age or newer — use it */
         Object.assign(state,loaded);
         try{ localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); }catch(ex){}
         setCloudStatus('☁ Synced',true);
         return true;
       } else {
-        /* Local has more data — push local up to cloud */
+        /* Local is newer — push up to cloud */
         setCloudStatus('☁ Uploading local data…',null);
         try{
+          var now=new Date().toISOString();
+          var snap=JSON.parse(JSON.stringify(state)); snap._updatedAt=now;
           await sbClient.from(TABLE).upsert(
-            {id:currentUser.id,user_id:currentUser.id,data:JSON.parse(JSON.stringify(state)),updated_at:new Date().toISOString()},
+            {id:currentUser.id,user_id:currentUser.id,data:snap,updated_at:now},
             {onConflict:'id'}
           );
+          state._updatedAt=now;
           setCloudStatus('☁ Synced',true);
         }catch(ex){ setCloudStatus('⚠ Upload failed',false); }
         return false;
@@ -5332,9 +5341,36 @@ renderAll();ensureEditableContractFields();
     }catch(e){ setCloudStatus('⚠ Load failed',false); return false; }
   }
 
-  /* Patch saveState to also sync to cloud */
+  /* Lightweight background check — only downloads full data if cloud is newer */
+  async function checkForRemoteUpdates(){
+    if(!currentUser) return;
+    try{
+      var res=await sbClient.from(TABLE).select('updated_at').eq('id',currentUser.id).maybeSingle();
+      if(res.error||!res.data) return;
+      var cloudTs=res.data.updated_at ? new Date(res.data.updated_at).getTime() : 0;
+      var localTs=state._updatedAt ? new Date(state._updatedAt).getTime() : 0;
+      if(cloudTs > localTs+5000){ /* Cloud is more than 5 seconds newer — pull full data */
+        setCloudStatus('☁ Updating…',null);
+        var full=await sbClient.from(TABLE).select('data,updated_at').eq('id',currentUser.id).maybeSingle();
+        if(!full.error&&full.data&&full.data.data){
+          Object.assign(state,full.data.data);
+          try{ localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); }catch(ex){}
+          try{ state=normalizeLoadedState(state); renderAll(); }catch(ex){}
+          setCloudStatus('☁ Synced',true);
+        }
+      }
+    }catch(e){}
+  }
+
+  /* Poll every 2 minutes for changes made on other devices */
+  setInterval(checkForRemoteUpdates, 2*60*1000);
+  /* Also check whenever this tab becomes visible again */
+  document.addEventListener('visibilitychange',function(){ if(!document.hidden) checkForRemoteUpdates(); });
+
+  /* Patch saveState to stamp local timestamp and sync to cloud */
   var origSaveState=window.saveState;
   window.saveState=function(){
+    state._updatedAt=new Date().toISOString();
     try{ if(origSaveState) origSaveState.apply(this,arguments); }catch(ex){}
     syncToCloud();
   };

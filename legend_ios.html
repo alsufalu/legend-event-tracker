@@ -324,19 +324,67 @@ async function doSignOut() {
 // ─── Cloud Sync ──────────────────────────────────────────
 async function loadFromCloud() {
   if (!currentUser) return;
-  const { data } = await sb.from(TABLE).select('data').eq('id', currentUser.id).maybeSingle();
-  if (data?.data) state = { events:[], customers:[], bartenders:[], costs:[], ...data.data };
+  const res = await sb.from(TABLE).select('data,updated_at').eq('id', currentUser.id).maybeSingle();
+  if (!res.data?.data) {
+    /* Cloud empty — push local up if we have anything */
+    if ((state.events||[]).length > 0) {
+      const now = new Date().toISOString();
+      const snap = JSON.parse(JSON.stringify(state)); snap._updatedAt = now;
+      await sb.from(TABLE).upsert({ id: currentUser.id, user_id: currentUser.id, data: snap, updated_at: now }, { onConflict: 'id' });
+      state._updatedAt = now;
+    }
+    return;
+  }
+  const loaded = res.data.data;
+  /* Timestamp-based conflict resolution */
+  const cloudTs = res.data.updated_at ? new Date(res.data.updated_at).getTime() : 0;
+  const localTs = state._updatedAt ? new Date(state._updatedAt).getTime() : 0;
+  if (cloudTs >= localTs) {
+    state = { events:[], customers:[], bartenders:[], costs:[], ...loaded };
+  } else {
+    /* Local is newer — push up */
+    const now = new Date().toISOString();
+    const snap = JSON.parse(JSON.stringify(state)); snap._updatedAt = now;
+    await sb.from(TABLE).upsert({ id: currentUser.id, user_id: currentUser.id, data: snap, updated_at: now }, { onConflict: 'id' });
+    state._updatedAt = now;
+  }
 }
 
 function scheduleSync() {
+  state._updatedAt = new Date().toISOString(); /* Stamp local change time */
   clearTimeout(_syncTimer);
   _syncTimer = setTimeout(saveToCloud, 1500);
 }
 
 async function saveToCloud() {
   if (!currentUser) return;
-  await sb.from(TABLE).upsert({ id: currentUser.id, user_id: currentUser.id, data: state, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+  const now = new Date().toISOString();
+  const snap = JSON.parse(JSON.stringify(state)); snap._updatedAt = now;
+  await sb.from(TABLE).upsert({ id: currentUser.id, user_id: currentUser.id, data: snap, updated_at: now }, { onConflict: 'id' });
+  state._updatedAt = now;
 }
+
+/* Lightweight background check — only downloads full data when cloud is newer */
+async function checkForRemoteUpdates() {
+  if (!currentUser) return;
+  try {
+    const res = await sb.from(TABLE).select('updated_at').eq('id', currentUser.id).maybeSingle();
+    if (!res.data) return;
+    const cloudTs = res.data.updated_at ? new Date(res.data.updated_at).getTime() : 0;
+    const localTs = state._updatedAt ? new Date(state._updatedAt).getTime() : 0;
+    if (cloudTs > localTs + 5000) {
+      const full = await sb.from(TABLE).select('data,updated_at').eq('id', currentUser.id).maybeSingle();
+      if (full.data?.data) {
+        state = { events:[], customers:[], bartenders:[], costs:[], ...full.data.data };
+        switchTab(currentTab, true);
+      }
+    }
+  } catch(e) {}
+}
+
+/* Poll every 2 minutes + check on tab focus */
+setInterval(checkForRemoteUpdates, 2*60*1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForRemoteUpdates(); });
 
 async function refreshData() {
   await loadFromCloud();
