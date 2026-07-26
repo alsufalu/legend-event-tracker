@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260712_095';
+  const BUILD='v20260712_096';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -2371,7 +2371,7 @@ function clearCostForm() { editingCostId = null; document.getElementById("gCostN
 function refreshStaffPayoutPreviews() {
   const tempEvent = { startTime: document.getElementById("eStartTime")?.value || "", endTime: document.getElementById("eEndTime")?.value || "", staffOvertimeHours: numeric(document.getElementById("eStaffOvertimeHours")?.value) || 0, bartenderAssignments: getCurrentAssignments() };
   document.querySelectorAll(".bartender-select-row").forEach(row => {
-    const assignment = { payType: row.querySelector(".bartender-paytype")?.value || "hourly", rate: Number(row.querySelector(".bartender-rate")?.value || 0), actualStartTime: row.querySelector(".bartender-actual-start")?.value || "", actualEndTime: row.querySelector(".bartender-actual-end")?.value || "", breakMinutes: Number(row.querySelector(".bartender-break-minutes")?.value || 0), actualHours: row.querySelector(".bartender-actual-hours")?.value || "", travelPay: Number(row.querySelector(".bartender-travel-pay")?.value || 0), expenseReimbursement: Number(row.querySelector(".bartender-expense-reimbursement")?.value || 0) };
+    const assignment = { payType: row.querySelector(".bartender-paytype")?.value || "hourly", rate: Number(row.querySelector(".bartender-rate")?.value || 0), actualStartTime: row.querySelector(".bartender-actual-start")?.value || "", actualEndTime: row.querySelector(".bartender-actual-end")?.value || "", breakMinutes: Number(row.querySelector(".bartender-break-minutes")?.value || 0), actualHours: row.querySelector(".bartender-actual-hours")?.value || "", travelPay: Number(row.querySelector(".bartender-travel-pay")?.value || 0), expenseReimbursement: Number(row.querySelector(".bartender-expense-reimbursement")?.value || 0), tips: Number(row.querySelector(".bartender-tips")?.value || 0) };
     const preview = row.querySelector(".bartender-payout-preview");
     if (preview) preview.value = money(bartenderAssignmentCost(assignment, tempEvent));
   });
