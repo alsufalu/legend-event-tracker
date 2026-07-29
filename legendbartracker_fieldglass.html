@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260712_096';
+  const BUILD='v20260712_097';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -720,6 +720,7 @@ tr:hover td { background:var(--surface2); }
   </div>
   <div class="topbar-right" style="display:flex;align-items:center;gap:8px;margin-left:auto;padding-left:12px;">
     <span id="lbtCloudStatus" style="font-size:11px;color:rgba(255,255,255,.5);white-space:nowrap;">☁ Not signed in</span>
+    <button id="lbtSyncNowBtn" title="Pull latest data from cloud" style="display:none;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border:none;border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer;font-family:inherit;flex-shrink:0;line-height:1;" onclick="window.lbtSyncNow&&window.lbtSyncNow()">↺</button>
     <button id="lbtSignOutBtn" style="display:none;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit;flex-shrink:0;" onclick="window.lbtSignOut&&window.lbtSignOut()">Sign Out</button>
   </div>
 </div>
@@ -5252,6 +5253,7 @@ renderAll();ensureEditableContractFields();
   var currentUser=null;
   window._sbCurrentUser=null;
   var _syncTimer=null;
+  var _lastCloudSync=0; /* timestamp of last successful cloud pull/push — in-memory only, resets on page load */
 
   function showApp(){
     document.querySelector('.app-layout').style.display='';
@@ -5267,6 +5269,8 @@ renderAll();ensureEditableContractFields();
     if(el){ el.textContent=msg; el.style.color=ok===true?'#34d399':ok===false?'#f87171':'rgba(255,255,255,.5)'; }
     var btn=document.getElementById('lbtSignOutBtn');
     if(btn) btn.style.display=currentUser?'':'none';
+    var syncBtn=document.getElementById('lbtSyncNowBtn');
+    if(syncBtn) syncBtn.style.display=currentUser?'':'none';
   }
 
   function syncToCloud(){
@@ -5283,12 +5287,31 @@ renderAll();ensureEditableContractFields();
           {onConflict:'id'}
         );
         if(res.error) throw res.error;
+        _lastCloudSync=new Date(now).getTime();
         state._updatedAt=now;
         setCloudStatus('☁ Synced',true);
-      }catch(e){ setCloudStatus('⚠ Sync failed',false); }
+      }catch(e){ setCloudStatus('⚠ Sync failed — click ↺ to retry',false); }
     },1500);
   }
 
+  async function pushLocalToCloud(){
+    try{
+      setCloudStatus('☁ Uploading…',null);
+      var now=new Date().toISOString();
+      var snap=JSON.parse(JSON.stringify(state)); snap._updatedAt=now;
+      var res=await sbClient.from(TABLE).upsert(
+        {id:currentUser.id,user_id:currentUser.id,data:snap,updated_at:now},
+        {onConflict:'id'}
+      );
+      if(res.error) throw res.error;
+      _lastCloudSync=new Date(now).getTime();
+      state._updatedAt=now;
+      setCloudStatus('☁ Synced',true);
+      return true;
+    }catch(e){ setCloudStatus('⚠ Upload failed',false); return false; }
+  }
+
+  /* On page load: ALWAYS use cloud data if it exists — no timestamp comparison */
   async function loadFromCloud(){
     if(!currentUser) return false;
     try{
@@ -5297,63 +5320,34 @@ renderAll();ensureEditableContractFields();
       if(res.error||!res.data||!res.data.data){
         /* Cloud is empty — push local data up if we have any */
         if((state.events||[]).length>0){
-          setCloudStatus('☁ Uploading local data…',null);
-          try{
-            var now=new Date().toISOString();
-            var snap=JSON.parse(JSON.stringify(state)); snap._updatedAt=now;
-            await sbClient.from(TABLE).upsert(
-              {id:currentUser.id,user_id:currentUser.id,data:snap,updated_at:now},
-              {onConflict:'id'}
-            );
-            state._updatedAt=now;
-            setCloudStatus('☁ Synced',true);
-          }catch(ex){ setCloudStatus('⚠ Upload failed',false); }
+          return await pushLocalToCloud();
         } else {
           setCloudStatus('☁ No cloud data',null);
         }
         return false;
       }
-      var loaded=res.data.data;
-      /* Timestamp-based conflict resolution — newest wins */
-      var cloudTs=res.data.updated_at ? new Date(res.data.updated_at).getTime() : 0;
-      var localTs=state._updatedAt ? new Date(state._updatedAt).getTime() : 0;
-      if(cloudTs>=localTs){
-        /* Cloud is same age or newer — use it */
-        Object.assign(state,loaded);
-        try{ localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); }catch(ex){}
-        setCloudStatus('☁ Synced',true);
-        return true;
-      } else {
-        /* Local is newer — push up to cloud */
-        setCloudStatus('☁ Uploading local data…',null);
-        try{
-          var now=new Date().toISOString();
-          var snap=JSON.parse(JSON.stringify(state)); snap._updatedAt=now;
-          await sbClient.from(TABLE).upsert(
-            {id:currentUser.id,user_id:currentUser.id,data:snap,updated_at:now},
-            {onConflict:'id'}
-          );
-          state._updatedAt=now;
-          setCloudStatus('☁ Synced',true);
-        }catch(ex){ setCloudStatus('⚠ Upload failed',false); }
-        return false;
-      }
+      /* Always use cloud data on page load — eliminates stale-localStorage problem */
+      Object.assign(state,res.data.data);
+      _lastCloudSync=res.data.updated_at ? new Date(res.data.updated_at).getTime() : Date.now();
+      try{ localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); }catch(ex){}
+      setCloudStatus('☁ Synced',true);
+      return true;
     }catch(e){ setCloudStatus('⚠ Load failed',false); return false; }
   }
 
-  /* Lightweight background check — only downloads full data if cloud is newer */
+  /* Background check: compare cloud updated_at against _lastCloudSync (in-memory) */
   async function checkForRemoteUpdates(){
-    if(!currentUser) return;
+    if(!currentUser||!_lastCloudSync) return;
     try{
       var res=await sbClient.from(TABLE).select('updated_at').eq('id',currentUser.id).maybeSingle();
       if(res.error||!res.data) return;
       var cloudTs=res.data.updated_at ? new Date(res.data.updated_at).getTime() : 0;
-      var localTs=state._updatedAt ? new Date(state._updatedAt).getTime() : 0;
-      if(cloudTs > localTs+5000){ /* Cloud is more than 5 seconds newer — pull full data */
+      if(cloudTs > _lastCloudSync+5000){
         setCloudStatus('☁ Updating…',null);
         var full=await sbClient.from(TABLE).select('data,updated_at').eq('id',currentUser.id).maybeSingle();
         if(!full.error&&full.data&&full.data.data){
           Object.assign(state,full.data.data);
+          _lastCloudSync=full.data.updated_at ? new Date(full.data.updated_at).getTime() : Date.now();
           try{ localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); }catch(ex){}
           try{ state=normalizeLoadedState(state); renderAll(); }catch(ex){}
           setCloudStatus('☁ Synced',true);
@@ -5362,15 +5356,26 @@ renderAll();ensureEditableContractFields();
     }catch(e){}
   }
 
-  /* Poll every 2 minutes for changes made on other devices */
+  /* Poll every 2 minutes + check on tab focus */
   setInterval(checkForRemoteUpdates, 2*60*1000);
-  /* Also check whenever this tab becomes visible again */
   document.addEventListener('visibilitychange',function(){ if(!document.hidden) checkForRemoteUpdates(); });
 
-  /* Patch saveState to stamp local timestamp and sync to cloud */
+  /* Manual sync button */
+  window.lbtSyncNow=async function(){
+    setCloudStatus('☁ Syncing…',null);
+    var res=await sbClient.from(TABLE).select('data,updated_at').eq('id',currentUser.id).maybeSingle();
+    if(res.data&&res.data.data){
+      Object.assign(state,res.data.data);
+      _lastCloudSync=res.data.updated_at ? new Date(res.data.updated_at).getTime() : Date.now();
+      try{ localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); }catch(ex){}
+      try{ state=normalizeLoadedState(state); renderAll(); }catch(ex){}
+      setCloudStatus('☁ Synced',true);
+    }
+  };
+
+  /* Patch saveState to sync to cloud on every save */
   var origSaveState=window.saveState;
   window.saveState=function(){
-    state._updatedAt=new Date().toISOString();
     try{ if(origSaveState) origSaveState.apply(this,arguments); }catch(ex){}
     syncToCloud();
   };
