@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260712_099';
+  const BUILD='v20260806_101';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -820,6 +820,15 @@ tr:hover td { background:var(--surface2); }
           <div></div>
         </div>
         <div class="field-wrap"><label class="field-label" for="bNotes">Notes</label><textarea id="bNotes" placeholder="Notes"></textarea></div>
+        <div class="field-wrap" id="bDaysOffSection" style="display:none;margin-top:10px;padding:14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);">
+          <label class="field-label" style="margin-bottom:8px;display:block;">📅 Days Off / Unavailable Dates</label>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;">
+            <input type="date" id="bDaysOffPicker" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font-family:inherit;font-size:13px;">
+            <button type="button" id="bAddDayOffBtn" style="padding:6px 14px;border:none;border-radius:6px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;">+ Add date</button>
+          </div>
+          <div id="bDaysOffChips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:20px;"></div>
+          <div class="small" style="color:var(--ink3);margin-top:8px;">Dates when this staff member is unavailable. These show as warnings when assigning them to events.</div>
+        </div>
         <div class="buttonbar" style="margin-top:10px;">
           <button class="primary" id="saveBartenderBtn">Save bartender</button>
           <button id="clearBartenderBtn">Clear</button>
@@ -1180,6 +1189,14 @@ tr:hover td { background:var(--surface2); }
           <div class="report-card" data-report="thumbtackCompare" style="border:1px solid var(--border);border-radius:10px;padding:16px 18px;cursor:pointer;background:var(--surface2);transition:border-color .15s;">
             <div style="font-size:15px;font-weight:700;margin-bottom:4px;">🔍 Thumbtack Lead Comparison</div>
             <div class="small" style="color:var(--ink3);">Upload a Thumbtack CSV export and see which leads (by customer name) are not yet in your events database.</div>
+          </div>
+          <div class="report-card" data-report="eventSchedule" style="border:1px solid var(--border);border-radius:10px;padding:16px 18px;cursor:pointer;background:var(--surface2);transition:border-color .15s;">
+            <div style="font-size:15px;font-weight:700;margin-bottom:4px;">📅 Events Schedule</div>
+            <div class="small" style="color:var(--ink3);">All events sorted soonest to latest, filterable by status. Shows staffing counts and key event details.</div>
+          </div>
+          <div class="report-card" data-report="staffAvailability" style="border:1px solid var(--border);border-radius:10px;padding:16px 18px;cursor:pointer;background:var(--surface2);transition:border-color .15s;">
+            <div style="font-size:15px;font-weight:700;margin-bottom:4px;">🗓 Staff Availability Checker</div>
+            <div class="small" style="color:var(--ink3);">Enter an event date to instantly see who's available and who has that day marked as off.</div>
           </div>
         </div>
 
@@ -1547,6 +1564,7 @@ function normalizeLoadedState(data) {
   if (!normalized.customers) normalized.customers = [];
   if (!normalized.bartenders) normalized.bartenders = [];
   if (!normalized.overheadCosts) normalized.overheadCosts = [];
+  normalized.bartenders = normalized.bartenders.map(b => ({ unavailableDates: [], ...b }));
   (normalized.events || []).forEach(e => {
     if (!e) return;
     if (e.eventType === undefined) e.eventType = "";
@@ -1952,6 +1970,19 @@ function bartenderOptionHtml(assignment = {}) {
     <div class="staff-hours-summary">Payout order: Actual hrs → Sched hrs → auto-calculated (event duration + 1 hr setup/cleanup + overtime). Enter Actual hrs after the event to override. Sched hrs auto-updates from event times unless you type your own value.</div>
   `;
 }
+function checkStaffAvailabilityWarning(wrap) {
+  const sel = wrap.querySelector(".bartender-assignment-select");
+  if (!sel || !sel.value) { const w = wrap.querySelector(".staff-avail-warn"); if(w) w.remove(); return; }
+  const eventDate = document.getElementById("eDate")?.value || "";
+  const bmap = bartenderMap();
+  const b = bmap[sel.value];
+  const unavail = b && eventDate && (b.unavailableDates||[]).includes(eventDate);
+  let warn = wrap.querySelector(".staff-avail-warn");
+  if (unavail) {
+    if (!warn) { warn = document.createElement("div"); warn.className = "staff-avail-warn"; wrap.appendChild(warn); }
+    warn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:12px;font-weight:600;color:#92400e;margin-top:6px;">⚠️ ${safe(b.name)} has ${eventDate} marked as unavailable. Confirm before assigning.</span>`;
+  } else if (warn) { warn.remove(); }
+}
 function addBartenderDropdown(assignment = null) {
   const wrap = document.createElement("div");
   wrap.className = "bartender-select-row staff-hours-row";
@@ -1971,6 +2002,8 @@ function addBartenderDropdown(assignment = null) {
   });
   wrap.querySelectorAll("input, select").forEach(el => el.addEventListener("input", refreshStaffPayoutPreviews));
   wrap.querySelectorAll("input, select").forEach(el => el.addEventListener("change", refreshStaffPayoutPreviews));
+  const assignSel = wrap.querySelector(".bartender-assignment-select");
+  if (assignSel) { assignSel.addEventListener("change", () => checkStaffAvailabilityWarning(wrap)); setTimeout(() => checkStaffAvailabilityWarning(wrap), 50); }
   const schedField = wrap.querySelector(".bartender-scheduled-hours");
   if (schedField) {
     schedField.addEventListener("input", () => { schedField.dataset.userSet = schedField.value !== "" ? "true" : "false"; });
@@ -2087,9 +2120,12 @@ function renderBartenders() {
   }
   const q = document.getElementById("bartenderSearch").value.toLowerCase().trim();
   const rows = (state.bartenders || []).filter(b => [b.name, b.phone, b.notes].join(" ").toLowerCase().includes(q));
-  document.getElementById("bartendersBody").innerHTML = rows.map(b => `
-    <tr><td><strong>${safe(b.name)}</strong></td><td>${safe(formatPhone(b.phone))}</td><td>${safe(b.notes)}</td><td><button onclick="editBartender('${b.id}')">Edit</button> <button class="danger" onclick="deleteBartender('${b.id}')">Delete</button></td></tr>
-  `).join("") || `<tr><td colspan="4">No bartenders found.</td></tr>`;
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById("bartendersBody").innerHTML = rows.map(b => {
+    const upcoming = (b.unavailableDates||[]).filter(d=>d>=today).sort();
+    const daysOffBadge = upcoming.length ? `<span style="margin-left:6px;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:700;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" title="${upcoming.slice(0,5).join(', ')}">${upcoming.length} day${upcoming.length!==1?'s':''} off</span>` : '';
+    return `<tr><td><strong>${safe(b.name)}</strong>${daysOffBadge}</td><td>${safe(formatPhone(b.phone))}</td><td>${safe(b.notes)}</td><td><button onclick="editBartender('${b.id}')">Edit / Days Off</button> <button class="danger" onclick="deleteBartender('${b.id}')">Delete</button></td></tr>`;
+  }).join("") || `<tr><td colspan="4">No bartenders found.</td></tr>`;
 }
 let eventsViewMode = "list";
 let calendarCursor = new Date(); calendarCursor.setDate(1);
@@ -2378,7 +2414,24 @@ function recalcQuoteFromRates() {
   bd.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
 }
 function clearCustomerForm() { editingCustomerId = null; document.getElementById("cName").value = ""; document.getElementById("cPhone").value = ""; document.getElementById("cNotes").value = ""; }
-function clearBartenderForm() { editingBartenderId = null; document.getElementById("bName").value = ""; document.getElementById("bPhone").value = ""; document.getElementById("bPayType").value = "hourly"; document.getElementById("bNotes").value = ""; }
+/* ── Days Off management ── */
+let _editingBartenderDaysOff = [];
+function renderDaysOffChips() {
+  const chip = (d) => {
+    const label = d.split('-').length===3 ? (parseInt(d.split('-')[1])+'/'+parseInt(d.split('-')[2])+'/'+d.split('-')[0]) : d;
+    const today = new Date().toISOString().slice(0,10);
+    const past = d < today;
+    return `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;background:${past?'var(--surface)':'#fef3c7'};color:${past?'var(--ink3)':'#92400e'};border:1px solid ${past?'var(--border)':'#fcd34d'};">`
+      +`${past?'':'🔴 '}${label}<button type="button" onclick="removeDayOff('${d}')" style="background:none;border:none;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 2px;color:inherit;opacity:.7;">×</button></span>`;
+  };
+  const sorted = [..._editingBartenderDaysOff].sort();
+  document.getElementById('bDaysOffChips').innerHTML = sorted.length ? sorted.map(chip).join('') : '<span style="font-size:12px;color:var(--ink3);">No dates added yet</span>';
+}
+window.removeDayOff = function(d) {
+  _editingBartenderDaysOff = _editingBartenderDaysOff.filter(x => x!==d);
+  renderDaysOffChips();
+};
+function clearBartenderForm() { editingBartenderId = null; _editingBartenderDaysOff = []; document.getElementById("bName").value = ""; document.getElementById("bPhone").value = ""; document.getElementById("bPayType").value = "hourly"; document.getElementById("bNotes").value = ""; document.getElementById("bDaysOffSection").style.display = "none"; document.getElementById("bDaysOffChips").innerHTML = ""; }
 function clearCostForm() { editingCostId = null; document.getElementById("gCostName").value = ""; document.getElementById("gCostCategory").value = ""; document.getElementById("gCostAmount").value = ""; document.getElementById("gCostDate").value = ""; document.getElementById("gCostNotes").value = ""; }
 function refreshStaffPayoutPreviews() {
   const startTime = document.getElementById("eStartTime")?.value || "";
@@ -2423,6 +2476,7 @@ function clearEventForm() {
 }
 document.getElementById("eEndTime").addEventListener("input", () => { updateDurationField(); refreshStaffPayoutPreviews(); });
 document.getElementById("eStartTime").addEventListener("input", () => { updateDurationField(); refreshStaffPayoutPreviews(); });
+document.getElementById("eDate").addEventListener("change", () => { document.querySelectorAll(".bartender-select-row").forEach(row => checkStaffAvailabilityWarning(row)); });
 ["eQuote","eDepositPaid","eFinalPaid","eReimbursableExpenses"].forEach(id => document.getElementById(id).addEventListener("input", updateBalanceDueField));
 ["eStaffOvertimeHours"].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener("input", refreshStaffPayoutPreviews); });
 ["eStartTime","eEndTime","eQTravelFee","eQDepositPercent","eQBartenderCount","eQBartenderRate","eQBartenderSetupHours","eQBarbackCount","eQBarbackRate","eQBarbackSetupHours"].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener("input", applyContractPricingToForm); });
@@ -2548,7 +2602,7 @@ document.getElementById("saveCustomerBtn").addEventListener("click", () => {
   saveState(); clearCustomerForm(); renderAll(); switchTab("customers");
 });
 document.getElementById("saveBartenderBtn").addEventListener("click", () => {
-  const payload = { id: editingBartenderId || nextId("B", state.bartenders || []), name: document.getElementById("bName").value.trim(), phone: formatPhone(document.getElementById("bPhone").value.trim()), payType: document.getElementById("bPayType").value, notes: document.getElementById("bNotes").value.trim() };
+  const payload = { id: editingBartenderId || nextId("B", state.bartenders || []), name: document.getElementById("bName").value.trim(), phone: formatPhone(document.getElementById("bPhone").value.trim()), payType: document.getElementById("bPayType").value, notes: document.getElementById("bNotes").value.trim(), unavailableDates: [..._editingBartenderDaysOff] };
   if (!payload.name) return alert("Please enter a bartender name.");
   if (editingBartenderId) state.bartenders = state.bartenders.map(b => b.id === editingBartenderId ? payload : b); else state.bartenders.push(payload);
   saveState(); clearBartenderForm(); renderAll(); switchTab("bartenders");
@@ -2625,6 +2679,13 @@ document.getElementById("saveCostBtn").addEventListener("click", () => {
 });
 document.getElementById("clearCustomerBtn").addEventListener("click", clearCustomerForm);
 document.getElementById("clearBartenderBtn").addEventListener("click", clearBartenderForm);
+document.getElementById("bAddDayOffBtn").addEventListener("click", () => {
+  const picker = document.getElementById("bDaysOffPicker");
+  const d = picker.value;
+  if (!d) return;
+  if (!_editingBartenderDaysOff.includes(d)) { _editingBartenderDaysOff.push(d); renderDaysOffChips(); }
+  picker.value = "";
+});
 document.getElementById("clearEventBtn").addEventListener("click", clearEventForm);
 document.getElementById("clearCostBtn").addEventListener("click", clearCostForm);
 document.getElementById("customerSearch").addEventListener("input", renderCustomers);
@@ -2656,7 +2717,7 @@ window.editCost = function(id) { const c=(state.overheadCosts||[]).find(x=>x.id=
 window.deleteCost = function(id) { if(!confirm("Delete this cost?")) return; state.overheadCosts=state.overheadCosts.filter(c=>c.id!==id); renderAll(); };
 window.editCustomer = function(id) { const c=(state.customers||[]).find(x=>x.id===id); if(!c) return; editingCustomerId=id; document.getElementById("cName").value=c.name||""; document.getElementById("cPhone").value=formatPhone(c.phone||""); document.getElementById("cNotes").value=c.notes||""; switchTab("customers"); window.scrollTo({top:0,behavior:"smooth"}); };
 window.deleteCustomer = function(id) { if((state.events||[]).some(e=>e.customerId===id)) return alert("This customer is linked to events. Reassign or delete those events first."); if(!confirm("Delete this customer?")) return; state.customers=state.customers.filter(c=>c.id!==id); renderAll(); };
-window.editBartender = function(id) { const b=(state.bartenders||[]).find(x=>x.id===id); if(!b) return; editingBartenderId=id; document.getElementById("bName").value=b.name||""; document.getElementById("bPhone").value=formatPhone(b.phone||""); document.getElementById("bPayType").value=b.payType||"hourly"; document.getElementById("bNotes").value=b.notes||""; switchTab("bartenders"); window.scrollTo({top:0,behavior:"smooth"}); };
+window.editBartender = function(id) { const b=(state.bartenders||[]).find(x=>x.id===id); if(!b) return; editingBartenderId=id; _editingBartenderDaysOff=[...(b.unavailableDates||[])]; document.getElementById("bName").value=b.name||""; document.getElementById("bPhone").value=formatPhone(b.phone||""); document.getElementById("bPayType").value=b.payType||"hourly"; document.getElementById("bNotes").value=b.notes||""; document.getElementById("bDaysOffSection").style.display="block"; renderDaysOffChips(); switchTab("bartenders"); window.scrollTo({top:0,behavior:"smooth"}); };
 window.deleteBartender = function(id) { if((state.events||[]).some(e=>(e.bartenderAssignments||[]).some(a=>a.id===id))) return alert("This bartender is assigned to one or more events."); if(!confirm("Delete this bartender?")) return; state.bartenders=state.bartenders.filter(b=>b.id!==id); renderAll(); };
 window.editEvent = function(id) {
   const e=(state.events||[]).find(x=>x.id===id); if(!e) return; editingEventId=id;
@@ -6193,6 +6254,272 @@ renderAll();ensureEditableContractFields();
             r.paidDate||'',r.paymentMethod||'',r.description||'',r.latestUpdate||''
           ]; });
           return [headers].concat(data).map(function(r){ return r.map(rCsvEsc).join(','); }).join('\n');
+        }catch(err){ return ''; }
+      }
+    },
+
+    staffAvailability:{
+      title:'Staff Availability Checker',
+      run:function(){
+        try{
+          var today=new Date().toISOString().slice(0,10);
+          function fmtD(d){ if(!d)return'—'; var p=d.split('-'); return (parseInt(p[1],10))+'/'+parseInt(p[2],10)+'/'+p[0]; }
+          function renderAvail(date){
+            var barts=(state.bartenders||[]).slice().sort(function(a,b){return String(a.name||'').localeCompare(String(b.name||''));});
+            if(!barts.length) return '<div style="padding:20px 0;color:var(--ink3);text-align:center;">No staff in system.</div>';
+            /* Count events on that date */
+            var eventsOnDate=(state.events||[]).filter(function(e){ return e&&!e.deleted&&e.date===date&&['booked','deciding','completed'].includes((e.status||'').toLowerCase()); });
+            var assignedOnDate=new Set();
+            eventsOnDate.forEach(function(ev){ (ev.bartenderAssignments||[]).forEach(function(a){ assignedOnDate.add(a.id); }); });
+            var avail=[], unavail=[];
+            barts.forEach(function(b){
+              var off=(b.unavailableDates||[]).includes(date);
+              if(off) unavail.push(b); else avail.push(b);
+            });
+            var evSummary=eventsOnDate.length
+              ? '<div style="margin-bottom:14px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);font-size:13px;">'
+                +'<strong>'+eventsOnDate.length+' booked event'+(eventsOnDate.length!==1?'s':'')+' on this date:</strong> '
+                +eventsOnDate.map(function(e){return safe(e.eventName||'Untitled');}).join(', ')
+                +'</div>' : '';
+            function staffRow(b, isAvail){
+              var assignedBadge=assignedOnDate.has(b.id)?'<span style="margin-left:6px;padding:2px 6px;border-radius:8px;font-size:10px;font-weight:700;background:#dbeafe;color:#1d4ed8;">Assigned</span>':'';
+              var upcoming=(b.unavailableDates||[]).filter(function(d){return d>=today;}).sort().slice(0,5);
+              var nextOff=upcoming.length?'<div class="small" style="color:var(--ink3);margin-top:3px;">Next off: '+upcoming.map(fmtD).join(', ')+'</div>':'';
+              return '<tr>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+(isAvail?'<span style="color:#16a34a;font-weight:700;font-size:15px;">✅</span>':'<span style="color:#dc2626;font-weight:700;font-size:15px;">🔴</span>')+'</td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+safe(b.name||'')+'</td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+(isAvail?'<span style="color:#16a34a;">Available</span>'+assignedBadge:'<span style="color:#dc2626;font-weight:600;">Day off</span>')+'</td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+nextOff+'</td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);"><button type="button" onclick="editBartender(\''+safe(b.id)+'\');if(typeof switchTab===\'function\')switchTab(\'bartenders\');" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface2);">Manage days off</button></td>'
+                +'</tr>';
+            }
+            var allRows=unavail.map(function(b){return staffRow(b,false);}).concat(avail.map(function(b){return staffRow(b,true);}));
+            var summary='<div style="margin-bottom:12px;display:flex;gap:16px;font-size:13px;">'
+              +'<span style="color:#dc2626;font-weight:700;">🔴 '+unavail.length+' unavailable</span>'
+              +'<span style="color:#16a34a;font-weight:700;">✅ '+avail.length+' available</span>'
+              +'</div>';
+            return evSummary+summary
+              +'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">'
+              +'<thead><tr style="background:var(--surface2);text-align:left;">'
+              +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);width:36px;"></th>'
+              +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Staff Member</th>'
+              +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Status</th>'
+              +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Upcoming Days Off</th>'
+              +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);"></th>'
+              +'</tr></thead>'
+              +'<tbody>'+allRows.join('')+'</tbody>'
+              +'</table></div>';
+          }
+          var initHtml='<div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
+            +'<label style="font-size:13px;font-weight:600;">Event date to check:</label>'
+            +'<input type="date" id="availDatePicker" value="'+today+'" style="font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);">'
+            +'</div>'
+            +'<div id="availResults">'+renderAvail(today)+'</div>';
+          setTimeout(function(){
+            var picker=document.getElementById('availDatePicker');
+            if(!picker) return;
+            picker.addEventListener('change',function(){
+              var res=document.getElementById('availResults');
+              if(res) res.innerHTML=renderAvail(picker.value||today);
+            });
+          },50);
+          return initHtml;
+        }catch(err){ return '<div style="color:#dc2626;">Error running report: '+String(err)+'</div>'; }
+      },
+      csv:function(){
+        try{
+          var today=new Date().toISOString().slice(0,10);
+          var barts=(state.bartenders||[]).slice().sort(function(a,b){return String(a.name||'').localeCompare(String(b.name||''));});
+          var allDates=new Set();
+          barts.forEach(function(b){ (b.unavailableDates||[]).forEach(function(d){ if(d>=today) allDates.add(d); }); });
+          var sortedDates=[...allDates].sort();
+          var headers=['Staff','Phone','Total Upcoming Days Off'].concat(sortedDates);
+          var rows=barts.map(function(b){
+            var upcoming=(b.unavailableDates||[]).filter(function(d){return d>=today;});
+            return [b.name||'',b.phone||'',upcoming.length].concat(sortedDates.map(function(d){return upcoming.includes(d)?'Unavailable':'Available';}));
+          });
+          return [headers].concat(rows).map(function(r){return r.map(rCsvEsc).join(',');}).join('\n');
+        }catch(err){return'';}
+      }
+    },
+
+    eventSchedule:{
+      title:'Events Schedule',
+      run:function(){
+        try{
+          var cmap=typeof customerMap==='function'?customerMap():{};
+          var deletedIds=new Set(typeof getDeletedEventIds==='function'?getDeletedEventIds():[]);
+          var ALL_STATUSES=['deciding','booked','completed','lost','canceled'];
+          var STATUS_LABELS={deciding:'Deciding',booked:'Booked',completed:'Completed',lost:'Lost',canceled:'Canceled/Postponed'};
+          var STATUS_COLORS={deciding:'#d97706',booked:'#2563eb',completed:'#16a34a',lost:'#6b7280',canceled:'#9ca3af'};
+
+          /* Build the filter checkboxes UI */
+          var cbHtml=ALL_STATUSES.map(function(s){
+            return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;white-space:nowrap;">'
+              +'<input type="checkbox" class="evSched-status-cb" value="'+s+'" checked>'
+              +'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+STATUS_COLORS[s]+';flex-shrink:0;"></span>'
+              +STATUS_LABELS[s]+'</label>';
+          }).join('');
+
+          function getEvents(selectedStatuses){
+            var sel=new Set(selectedStatuses);
+            var evts=(state.events||[]).filter(function(e){
+              if(!e||deletedIds.has(String(e.id))) return false;
+              return sel.has((e.status||'deciding').toLowerCase());
+            });
+            evts.sort(function(a,b){
+              var da=a.date||'9999-99-99', db=b.date||'9999-99-99';
+              if(da<db) return -1; if(da>db) return 1;
+              var ta=a.startTime||'', tb=b.startTime||'';
+              return ta<tb?-1:ta>tb?1:0;
+            });
+            return evts;
+          }
+
+          function fmtDate(d){
+            if(!d) return '—';
+            var parts=d.split('-');
+            if(parts.length===3) return (parseInt(parts[1],10))+'/'+parseInt(parts[2],10)+'/'+parts[0];
+            return d;
+          }
+          function fmtTime(t){
+            if(!t) return '';
+            var parts=t.split(':');
+            if(parts.length<2) return t;
+            var h=parseInt(parts[0],10), m=parts[1];
+            var ampm=h>=12?'PM':'AM';
+            h=h%12||12;
+            return h+':'+m+' '+ampm;
+          }
+
+          function getStaffing(ev){
+            var assignments=ev.bartenderAssignments||[];
+            if(assignments.length>0){
+              var barts=assignments.filter(function(a){return (a.role||'Bartender').toLowerCase()==='bartender';}).length;
+              var backs=assignments.filter(function(a){return (a.role||'').toLowerCase()==='barback';}).length;
+              var other=assignments.length-barts-backs;
+              var parts=[];
+              if(barts>0) parts.push(barts+' Bartender'+(barts!==1?'s':''));
+              if(backs>0) parts.push(backs+' Barback'+(backs!==1?'s':''));
+              if(other>0) parts.push(other+' Other');
+              return {text:parts.join(', ')||assignments.length+' assigned', total:assignments.length, source:'assigned'};
+            }
+            /* Fallback to quoted counts */
+            var qb=parseInt(ev.quotedBartenderCount||0,10)||0;
+            var qbk=parseInt(ev.quotedBarbackCount||0,10)||0;
+            if(qb||qbk){
+              var parts2=[];
+              if(qb>0) parts2.push(qb+' Bartender'+(qb!==1?'s':''));
+              if(qbk>0) parts2.push(qbk+' Barback'+(qbk!==1?'s':''));
+              return {text:parts2.join(', '), total:qb+qbk, source:'quoted'};
+            }
+            return {text:'—', total:0, source:'none'};
+          }
+
+          function renderTable(evts){
+            if(!evts.length) return '<tr><td colspan="8" style="padding:16px 10px;text-align:center;color:var(--ink3);">No events match the selected filters.</td></tr>';
+            return evts.map(function(ev){
+              var cust=cmap[ev.customerId]||{};
+              var custName=cust.name||'—';
+              var status=(ev.status||'deciding').toLowerCase();
+              var statusLabel=STATUS_LABELS[status]||ev.status||'—';
+              var statusColor=STATUS_COLORS[status]||'#6b7280';
+              var staffing=getStaffing(ev);
+              var staffNote=staffing.source==='quoted'
+                ?'<span style="font-size:10px;color:var(--ink3);margin-left:4px;">(quoted)</span>'
+                :(staffing.source==='assigned'?'':'');
+              var timeStr=ev.startTime?(fmtTime(ev.startTime)+(ev.endTime?' – '+fmtTime(ev.endTime):'')):'—';
+              var quote=parseFloat(ev.quotationAmount)||0;
+              return '<tr>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);white-space:nowrap;">'+safe(fmtDate(ev.date))+'</td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+safe(ev.eventName||'Untitled')+'</td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(custName)+'</td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(ev.venueName||ev.venueAddress||'—')+'</td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);white-space:nowrap;">'+safe(timeStr)+'</td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'
+                  +'<span style="display:inline-flex;align-items:center;gap:5px;">'
+                  +'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+statusColor+';flex-shrink:0;"></span>'
+                  +safe(statusLabel)+'</span></td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(staffing.text)+staffNote+'</td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;">'+(quote>0?rMoney(quote):'—')+'</td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'
+                  +'<button type="button" onclick="editEvent(\''+safe(String(ev.id))+'\');if(typeof switchTab===\'function\')switchTab(\'events\');" '
+                  +'style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface2);">Open</button>'
+                  +'</td>'
+                +'</tr>';
+            }).join('');
+          }
+
+          var initEvts=getEvents(ALL_STATUSES);
+          window._rptEventScheduleRows=initEvts;
+
+          var thead='<thead><tr style="background:var(--surface2);text-align:left;">'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);white-space:nowrap;">Date</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Event Name</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Customer</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Venue</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);white-space:nowrap;">Time</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Status</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Staffing</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;">Quote</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);"></th>'
+            +'</tr></thead>';
+
+          var html='<div style="margin-bottom:14px;">'
+            +'<div style="font-size:13px;font-weight:600;margin-bottom:8px;">Filter by status:</div>'
+            +'<div id="evSchedStatusFilters" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">'+cbHtml+'</div>'
+            +'</div>'
+            +'<div style="overflow-x:auto;">'
+            +'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+            +thead
+            +'<tbody id="evSchedTableBody">'+renderTable(initEvts)+'</tbody>'
+            +'</table></div>';
+
+          setTimeout(function(){
+            var container=document.getElementById('evSchedStatusFilters');
+            if(!container) return;
+            container.addEventListener('change',function(){
+              var sel=[];
+              container.querySelectorAll('.evSched-status-cb').forEach(function(cb){ if(cb.checked) sel.push(cb.value); });
+              var filtered=getEvents(sel);
+              window._rptEventScheduleRows=filtered;
+              var tbody=document.getElementById('evSchedTableBody');
+              if(tbody) tbody.innerHTML=renderTable(filtered);
+            });
+          },50);
+
+          return html;
+        }catch(err){ return '<div style="color:#dc2626;">Error running report: '+String(err)+'</div>'; }
+      },
+      csv:function(){
+        try{
+          var cmap=typeof customerMap==='function'?customerMap():{};
+          var deletedIds=new Set(typeof getDeletedEventIds==='function'?getDeletedEventIds():[]);
+          var evts=(state.events||[]).filter(function(e){ return e&&!deletedIds.has(String(e.id)); });
+          evts.sort(function(a,b){
+            var da=a.date||'9999-99-99', db=b.date||'9999-99-99';
+            if(da<db) return -1; if(da>db) return 1;
+            return (a.startTime||'')<(b.startTime||'')?-1:1;
+          });
+          var headers=['Date','Event Name','Customer','Venue','Address','Start Time','End Time','Status','# Bartenders','# Barbacks','Staffing Source','Quote'];
+          var rows=evts.map(function(ev){
+            var cust=(cmap[ev.customerId]||{}).name||'';
+            var assignments=ev.bartenderAssignments||[];
+            var barts,backs,source;
+            if(assignments.length>0){
+              barts=assignments.filter(function(a){return (a.role||'Bartender').toLowerCase()==='bartender';}).length;
+              backs=assignments.filter(function(a){return (a.role||'').toLowerCase()==='barback';}).length;
+              source='Assigned';
+            } else {
+              barts=parseInt(ev.quotedBartenderCount||0,10)||0;
+              backs=parseInt(ev.quotedBarbackCount||0,10)||0;
+              source=barts||backs?'Quoted':'None';
+            }
+            return [ev.date||'',ev.eventName||'',cust,ev.venueName||'',ev.venueAddress||'',
+              ev.startTime||'',ev.endTime||'',ev.status||'',barts,backs,source,
+              Number((parseFloat(ev.quotationAmount)||0).toFixed(2))];
+          });
+          return [headers].concat(rows).map(function(r){ return r.map(rCsvEsc).join(','); }).join('\n');
         }catch(err){ return ''; }
       }
     },

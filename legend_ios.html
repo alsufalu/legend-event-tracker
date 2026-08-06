@@ -395,6 +395,7 @@ async function refreshData() {
 function safe(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function money(n) { return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtDate(d) { if(!d) return '—'; const p=d.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; }
+function fmtTime(t) { if(!t) return ''; const [hh,mm]=t.split(':'); const h=parseInt(hh,10); return (h%12||12)+':'+(mm||'00')+' '+(h>=12?'PM':'AM'); }
 function fmtPhone(p) { const d=(p||'').replace(/\D/g,''); return d.length===10?`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`:p||'—'; }
 function generateId() { return Date.now().toString(36)+Math.random().toString(36).slice(2); }
 function customerMap() { return Object.fromEntries((state.customers||[]).map(c=>[c.id,c])); }
@@ -804,6 +805,8 @@ function getStaffHtml() {
 // ─── Tab: Reports ────────────────────────────────────────
 function getReportsHtml() {
   const reports = [
+    { id:'staffAvailability', icon:'🗓', title:'Staff Availability', sub:'Enter a date to see who\'s available to work' },
+    { id:'eventSchedule', icon:'📅', title:'Events Schedule', sub:'All events soonest to latest, filterable by status' },
     { id:'balanceDue', icon:'💰', title:'Balance Still Due', sub:'Completed events with outstanding balance' },
     { id:'unpaidStaff', icon:'👤', title:'Unpaid Staff', sub:'Staff owed money on completed events' },
     { id:'staffEvents', icon:'📋', title:'Staff Events Report', sub:'All assignments with pay breakdown' },
@@ -865,17 +868,46 @@ function openEventDetail(id) {
   </div>`;
 
   // Financials
+  const depReq = parseFloat(ev.depositRequired)||0;
+  const evCosts = parseFloat(ev.eventCosts)||0;
+  const adCost = parseFloat(ev.advertisingCost)||0;
   html += `<div class="section"><div class="section-hdr">Financials</div>
     <div class="detail-list">
-      <div class="detail-row"><span class="detail-lbl">Quote</span><span class="detail-val">${money(fin.quote)}</span></div>
-      ${fin.reimb>0?`<div class="detail-row"><span class="detail-lbl">Reimbursable</span><span class="detail-val">${money(fin.reimb)}</span></div>`:''}
-      <div class="detail-row"><span class="detail-lbl">Collected</span><span class="detail-val">${money(fin.collected)}</span></div>
-      <div class="detail-row"><span class="detail-lbl">Balance Due</span><span class="detail-val ${fin.balance>0?'money-negative':''}">${money(fin.balance)}</span></div>
-      <div class="detail-row"><span class="detail-lbl">Staff Cost</span><span class="detail-val">${money(fin.staffCost)}</span></div>
-      ${fin.tips>0?`<div class="detail-row"><span class="detail-lbl">Tips Paid Out</span><span class="detail-val">${money(fin.tips)} <span style="font-size:11px;color:var(--label2);">pass-through</span></span></div>`:''}
-      <div class="detail-row"><span class="detail-lbl">Net Profit</span><span class="detail-val ${fin.profit>=0?'money-positive':'money-negative'}">${money(fin.profit)}</span></div>
+      <div class="detail-row"><span class="detail-lbl">Quotation</span><span class="detail-val" style="font-weight:600;">${money(fin.quote)}</span></div>
+      ${fin.reimb>0?`<div class="detail-row"><span class="detail-lbl">Reimbursable Exp</span><span class="detail-val">${money(fin.reimb)}</span></div>`:''}
+      <div class="detail-row"><span class="detail-lbl">Balance Due</span><span class="detail-val" style="font-weight:700;color:${fin.balance>0?'#dc2626':'#16a34a'};">${money(fin.balance)}</span></div>
     </div>
   </div>`;
+
+  html += `<div class="section"><div class="section-hdr">Payments</div>
+    <div class="detail-list">
+      ${depReq>0?`<div class="detail-row"><span class="detail-lbl">Deposit Required</span><span class="detail-val">${money(depReq)}</span></div>`:''}
+      <div class="detail-row"><span class="detail-lbl">Deposit Paid</span><span class="detail-val">${money(fin.deposit)}</span></div>
+      ${ev.depositDatePaid?`<div class="detail-row"><span class="detail-lbl">Deposit Date</span><span class="detail-val">${fmtDate(ev.depositDatePaid)}</span></div>`:''}
+      ${ev.depositPaidBy?`<div class="detail-row"><span class="detail-lbl">Deposit Method</span><span class="detail-val">${safe(ev.depositPaidBy)}</span></div>`:''}
+      <div class="detail-row"><span class="detail-lbl">Final Paid</span><span class="detail-val">${money(fin.final)}</span></div>
+      ${ev.finalAmountPaidDate?`<div class="detail-row"><span class="detail-lbl">Final Date</span><span class="detail-val">${fmtDate(ev.finalAmountPaidDate)}</span></div>`:''}
+      ${ev.finalAmountPaymentMethod?`<div class="detail-row"><span class="detail-lbl">Final Method</span><span class="detail-val">${safe(ev.finalAmountPaymentMethod)}</span></div>`:''}
+      <div class="detail-row"><span class="detail-lbl">Total Collected</span><span class="detail-val" style="font-weight:600;">${money(fin.collected)}</span></div>
+    </div>
+  </div>`;
+
+  html += `<div class="section"><div class="section-hdr">Costs &amp; Profit</div>
+    <div class="detail-list">
+      <div class="detail-row"><span class="detail-lbl">Staff Cost</span><span class="detail-val">${money(fin.staffCost)}</span></div>
+      ${fin.tips>0?`<div class="detail-row"><span class="detail-lbl">Tips Paid Out</span><span class="detail-val">${money(fin.tips)} <span style="font-size:11px;color:var(--label2);">pass-through</span></span></div>`:''}
+      ${evCosts>0?`<div class="detail-row"><span class="detail-lbl">Event Costs/COGS</span><span class="detail-val">${money(evCosts)}</span></div>`:''}
+      ${adCost>0?`<div class="detail-row"><span class="detail-lbl">Advertising</span><span class="detail-val">${money(adCost)}</span></div>`:''}
+      <div class="detail-row"><span class="detail-lbl">Net Profit</span><span class="detail-val" style="font-weight:700;color:${fin.profit>=0?'#16a34a':'#dc2626'};">${money(fin.profit)}</span></div>
+    </div>
+  </div>`;
+
+  if (ev.bookingSite||ev.contractSentDate) {
+    html += `<div class="section"><div class="section-hdr">Contract</div><div class="detail-list">`;
+    if (ev.bookingSite) html += `<div class="detail-row"><span class="detail-lbl">Booking Source</span><span class="detail-val">${safe(ev.bookingSite)}</span></div>`;
+    if (ev.contractSentDate) html += `<div class="detail-row"><span class="detail-lbl">Contract Sent</span><span class="detail-val">${fmtDate(ev.contractSentDate)}</span></div>`;
+    html += `</div></div>`;
+  }
 
   // Staff
   const assignments = ev.bartenderAssignments||[];
@@ -1115,11 +1147,26 @@ function openEditEvent(id) {
     </div>
   </div>`;
 
-  html += `<div class="form-section"><div class="form-section-label">Financials</div>
+  const balDue = Math.max(0,(parseFloat(ev.quotationAmount)||0)+(parseFloat(ev.reimbursableExpenses)||0)-(parseFloat(ev.depositAmountPaid)||0)-(parseFloat(ev.finalAmountPaid)||0));
+  html += `<div class="form-section"><div class="form-section-label">Quotation &amp; Payment</div>
     <div class="form-group">
-      <div class="form-row"><label class="form-lbl">Quote ($)</label><input class="form-inp" id="fe_quote" type="number" step="0.01" placeholder="0.00" value="${safe(ev.quotationAmount||'')}"></div>
-      <div class="form-row"><label class="form-lbl">Deposit Paid</label><input class="form-inp" id="fe_deposit" type="number" step="0.01" placeholder="0.00" value="${safe(ev.depositAmountPaid||'')}"></div>
-      <div class="form-row"><label class="form-lbl">Final Paid</label><input class="form-inp" id="fe_final" type="number" step="0.01" placeholder="0.00" value="${safe(ev.finalAmountPaid||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Booking Source</label><input class="form-inp" id="fe_bookingSite" placeholder="e.g. Thumbtack, referral" value="${safe(ev.bookingSite||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Contract Sent</label><input class="form-inp" id="fe_contractSentDate" type="date" value="${safe(ev.contractSentDate||'')}"></div>
+      <div class="form-row" style="border-top:1px solid var(--separator);margin-top:4px;padding-top:4px;"><label class="form-lbl" style="font-weight:600;">Quotation ($)</label><input class="form-inp" id="fe_quote" type="number" step="0.01" placeholder="0.00" value="${safe(ev.quotationAmount||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Reimbursable Exp ($)</label><input class="form-inp" id="fe_reimb" type="number" step="0.01" placeholder="0.00" title="Expenses reimbursed by customer — added to balance due" value="${safe(ev.reimbursableExpenses||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Event Costs / COGS ($)</label><input class="form-inp" id="fe_eventCosts" type="number" step="0.01" placeholder="0.00" value="${safe(ev.eventCosts||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Advertising Cost ($)</label><input class="form-inp" id="fe_adCost" type="number" step="0.01" placeholder="0.00" value="${safe(ev.advertisingCost||'')}"></div>
+      <div class="form-row" style="border-top:1px solid var(--separator);margin-top:4px;padding-top:4px;"><label class="form-lbl">Deposit Required ($)</label><input class="form-inp" id="fe_depositRequired" type="number" step="0.01" placeholder="0.00" value="${safe(ev.depositRequired||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Deposit Paid ($)</label><input class="form-inp" id="fe_deposit" type="number" step="0.01" placeholder="0.00" value="${safe(ev.depositAmountPaid||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Deposit Date</label><input class="form-inp" id="fe_depositDate" type="date" value="${safe(ev.depositDatePaid||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Deposit Paid By</label><input class="form-inp" id="fe_depositPaidBy" placeholder="e.g. Venmo, Zelle, cash" value="${safe(ev.depositPaidBy||'')}"></div>
+      <div class="form-row" style="border-top:1px solid var(--separator);margin-top:4px;padding-top:4px;"><label class="form-lbl">Final Payment ($)</label><input class="form-inp" id="fe_final" type="number" step="0.01" placeholder="0.00" value="${safe(ev.finalAmountPaid||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Final Payment Date</label><input class="form-inp" id="fe_finalDate" type="date" value="${safe(ev.finalAmountPaidDate||'')}"></div>
+      <div class="form-row"><label class="form-lbl">Final Payment Method</label><input class="form-inp" id="fe_finalMethod" placeholder="e.g. Venmo, Zelle, check" value="${safe(ev.finalAmountPaymentMethod||'')}"></div>
+      <div class="form-row" style="background:var(--fill);border-radius:8px;margin-top:6px;border:none;">
+        <label class="form-lbl" style="font-weight:600;">Balance Due</label>
+        <span id="fe_balDue" style="font-size:16px;font-weight:700;color:${balDue>0?'#dc2626':'#16a34a'};">${money(balDue)}</span>
+      </div>
     </div>
   </div>`;
 
@@ -1214,8 +1261,18 @@ function saveEventForm(id) {
     venueName: document.getElementById('fe_venue').value,
     venueAddress: document.getElementById('fe_addr').value,
     quotationAmount: document.getElementById('fe_quote').value,
+    reimbursableExpenses: document.getElementById('fe_reimb').value,
+    eventCosts: document.getElementById('fe_eventCosts').value,
+    advertisingCost: document.getElementById('fe_adCost').value,
+    depositRequired: document.getElementById('fe_depositRequired').value,
     depositAmountPaid: document.getElementById('fe_deposit').value,
+    depositDatePaid: document.getElementById('fe_depositDate').value,
+    depositPaidBy: document.getElementById('fe_depositPaidBy').value,
     finalAmountPaid: document.getElementById('fe_final').value,
+    finalAmountPaidDate: document.getElementById('fe_finalDate').value,
+    finalAmountPaymentMethod: document.getElementById('fe_finalMethod').value,
+    bookingSite: document.getElementById('fe_bookingSite').value,
+    contractSentDate: document.getElementById('fe_contractSentDate').value,
     quotedBartenderCount: Number(document.getElementById('fe_bartCount').value)||null,
     quotedBartenderRate: Number(document.getElementById('fe_bartRate').value)||null,
     quotedBartenderSetupHours: Number(document.getElementById('fe_bartSetup').value)||null,
@@ -1249,6 +1306,14 @@ function addAssignmentToForm(eventId, currentAssignments) {
   const role = document.getElementById('fe_role').value||'Bartender';
   const payType = document.getElementById('fe_paytype').value;
   const rate = document.getElementById('fe_rate').value||0;
+  // Check availability
+  const eventDate = document.getElementById('fe_date')?.value || '';
+  const bmap2 = bartenderMap();
+  const staffB = bmap2[bartId];
+  if (staffB && eventDate && (staffB.unavailableDates||[]).includes(eventDate)) {
+    const go = confirm(`⚠️ ${staffB.name} has ${eventDate} marked as unavailable (day off).\n\nAdd them anyway?`);
+    if (!go) return;
+  }
   const newA = { id: bartId, role, payType, rate: Number(rate), paid: false };
   const updated = [...(currentAssignments||[]), newA];
   // Update the actual event in state if editing
@@ -1429,12 +1494,83 @@ function openStaffDetail(id) {
     html += `</div></div>`;
   }
 
+  // Days Off section
+  const today2 = new Date().toISOString().slice(0,10);
+  const upcoming = (b.unavailableDates||[]).filter(d=>d>=today2).sort();
+  html += `<div class="section"><div class="section-hdr">Days Off / Unavailability</div>
+    <div class="detail-list">
+      <div class="detail-row"><span class="detail-lbl">Upcoming</span><span class="detail-val">${upcoming.length>0?upcoming.length+' date'+(upcoming.length!==1?'s':''):'None scheduled'}</span></div>
+      ${upcoming.slice(0,5).map(d=>`<div class="detail-row"><span class="detail-lbl"></span><span class="detail-val" style="color:#92400e;font-weight:600;">🔴 ${fmtDate(d)}</span></div>`).join('')}
+    </div>
+    <div style="padding:8px 16px 12px;">
+      <button class="btn btn-secondary" style="width:100%;" onclick="openManageDaysOff('${safe(id)}')">📅 Manage Days Off</button>
+    </div>
+  </div>`;
+
   html += `<div class="btn-wrap">
     <button class="btn btn-primary" onclick="openEditStaff('${safe(id)}')">✏️ Edit Staff Member</button>
     <button class="btn btn-destructive" onclick="confirmDeleteStaff('${safe(id)}')">🗑 Delete</button>
   </div>`;
 
   openSheet(safe(b.name), html, '✕');
+}
+
+function openManageDaysOff(id) {
+  const b = (state.bartenders||[]).find(b=>b.id===id);
+  if (!b) return;
+  let workingDates = [...(b.unavailableDates||[])];
+  const today = new Date().toISOString().slice(0,10);
+
+  function renderDaysOffHtml() {
+    const sorted = [...workingDates].sort();
+    const upcoming = sorted.filter(d=>d>=today);
+    const past = sorted.filter(d=>d<today);
+    let chips = upcoming.map(d=>`
+      <div class="detail-row" style="padding:10px 0;">
+        <span class="detail-val" style="color:#92400e;font-weight:600;">🔴 ${fmtDate(d)}</span>
+        <button onclick="removeMobileDayOff('${d}')" style="background:none;border:1px solid #dc2626;border-radius:6px;color:#dc2626;padding:4px 10px;font-size:12px;cursor:pointer;">Remove</button>
+      </div>`).join('');
+    if (!upcoming.length) chips = '<div class="detail-row"><span class="detail-val" style="color:var(--label2);">No upcoming days off</span></div>';
+    return `
+      <div class="form-section"><div class="form-section-label">Add Date Off</div>
+        <div class="form-group">
+          <div class="form-row" style="border-bottom:none;flex-direction:column;gap:8px;">
+            <input class="form-inp" id="mob_daysoff_date" type="date" value="${today}" style="width:100%;">
+            <button onclick="addMobileDayOff()" style="width:100%;padding:13px;background:var(--primary);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;">+ Add This Date</button>
+          </div>
+        </div>
+      </div>
+      <div class="form-section"><div class="form-section-label">Upcoming Days Off</div>
+        <div class="form-group">${chips}</div>
+      </div>
+      ${past.length?`<div class="form-section"><div class="form-section-label" style="color:var(--label2);">Past Dates (${past.length})</div>
+        <div class="form-group">${past.slice(-5).reverse().map(d=>`<div class="detail-row"><span class="detail-val" style="color:var(--label2);">${fmtDate(d)}</span><button onclick="removeMobileDayOff('${d}')" style="background:none;border:1px solid var(--separator);border-radius:6px;color:var(--label2);padding:4px 10px;font-size:12px;cursor:pointer;">Remove</button></div>`).join('')}
+        </div>
+      </div>`:''}
+      <div class="btn-wrap">
+        <button class="btn btn-primary" onclick="saveDaysOff('${safe(id)}')">💾 Save Days Off</button>
+        <button class="btn btn-secondary" onclick="openStaffDetail('${safe(id)}')">← Back</button>
+      </div>`;
+  }
+
+  window._editingDaysOff = workingDates;
+  window.addMobileDayOff = function() {
+    const d = document.getElementById('mob_daysoff_date')?.value;
+    if (!d || window._editingDaysOff.includes(d)) return;
+    window._editingDaysOff.push(d);
+    document.getElementById('sheetBody').innerHTML = renderDaysOffHtml();
+  };
+  window.removeMobileDayOff = function(d) {
+    window._editingDaysOff = window._editingDaysOff.filter(x=>x!==d);
+    document.getElementById('sheetBody').innerHTML = renderDaysOffHtml();
+  };
+  window.saveDaysOff = function(bid) {
+    const bart = (state.bartenders||[]).find(b=>b.id===bid);
+    if (bart) { bart.unavailableDates = [...window._editingDaysOff]; scheduleSync(); }
+    openStaffDetail(bid);
+  };
+
+  openSheet(`📅 Days Off — ${safe(b.name)}`, renderDaysOffHtml(), '✕');
 }
 
 function openAddStaff() { openEditStaff(null); }
@@ -1457,7 +1593,8 @@ function openEditStaff(id) {
 function saveStaffForm(id) {
   const name = document.getElementById('fb_name').value.trim();
   if (!name) { alert('Name is required.'); return; }
-  const data = { id:id||generateId(), name, phone:document.getElementById('fb_phone').value, notes:document.getElementById('fb_notes').value };
+  const existing = id ? (state.bartenders||[]).find(b=>b.id===id) : null;
+  const data = { id:id||generateId(), name, phone:document.getElementById('fb_phone').value, notes:document.getElementById('fb_notes').value, unavailableDates: existing?.unavailableDates||[] };
   if (id) {
     const idx=(state.bartenders||[]).findIndex(b=>b.id===id);
     if(idx>=0) state.bartenders[idx]={...state.bartenders[idx],...data};
@@ -1476,7 +1613,141 @@ function confirmDeleteStaff(id) {
 function openReport(id) {
   let title='', html='';
 
-  if (id==='balanceDue') {
+  if (id==='staffAvailability') {
+    title = '🗓 Staff Availability';
+    const today = new Date().toISOString().slice(0,10);
+
+    function renderAvailMobile(date) {
+      const barts = (state.bartenders||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+      if (!barts.length) return `<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">No staff added yet</div></div>`;
+      const eventsOnDate = (state.events||[]).filter(e=>!e.deleted&&e.date===date&&['booked','deciding','completed'].includes((e.status||'').toLowerCase()));
+      const assignedIds = new Set(eventsOnDate.flatMap(ev=>(ev.bartenderAssignments||[]).map(a=>a.id)));
+      const unavail = barts.filter(b=>(b.unavailableDates||[]).includes(date));
+      const avail = barts.filter(b=>!(b.unavailableDates||[]).includes(date));
+      let html = '';
+      if (eventsOnDate.length) {
+        html += `<div style="margin:0 16px 8px;padding:10px 12px;background:#dbeafe;border-radius:8px;font-size:13px;color:#1e3a8a;">
+          <strong>${eventsOnDate.length} event${eventsOnDate.length!==1?'s':''} on this date:</strong> ${eventsOnDate.map(e=>safe(e.eventName||'Event')).join(', ')}
+        </div>`;
+      }
+      html += `<div style="margin:0 16px 4px;display:flex;gap:16px;font-size:13px;font-weight:600;">
+        <span style="color:#dc2626;">🔴 ${unavail.length} unavailable</span>
+        <span style="color:#16a34a;">✅ ${avail.length} available</span>
+      </div>`;
+      html += `<div class="list" style="margin:8px 16px;">`;
+      const allSorted = [...unavail.map(b=>({b,isAvail:false})),...avail.map(b=>({b,isAvail:true}))];
+      allSorted.forEach(({b,isAvail})=>{
+        const assigned = assignedIds.has(b.id);
+        const upcomingOff = (b.unavailableDates||[]).filter(d=>d>date).sort().slice(0,3);
+        html += `<div class="cell" onclick="closeSheet();setTimeout(()=>openStaffDetail('${safe(b.id)}'),200)">
+          <div class="cell-icon" style="background:${isAvail?'#dcfce7':'#fee2e2'};font-size:18px;">${isAvail?'✅':'🔴'}</div>
+          <div class="cell-body">
+            <div class="cell-title">${safe(b.name||'')}${assigned?'<span style="margin-left:6px;font-size:11px;background:#dbeafe;color:#1d4ed8;padding:1px 6px;border-radius:8px;">Assigned</span>':''}</div>
+            <div class="cell-sub">${isAvail?'Available':`Day off${upcomingOff.length?' · Next off: '+upcomingOff.map(fmtDate).join(', '):''}` }</div>
+          </div>
+          <span class="cell-chevron">›</span>
+        </div>`;
+      });
+      html += `</div>`;
+      return html;
+    }
+
+    html = `<div style="padding:12px 16px 8px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--label2);">Check availability for date:</div>
+      <input id="mob_availDate" type="date" value="${today}" style="width:100%;padding:12px;border:1px solid var(--separator);border-radius:10px;font-size:16px;background:var(--surface);color:var(--label);font-family:inherit;box-sizing:border-box;">
+    </div>
+    <div id="mob_availResults">${renderAvailMobile(today)}</div>`;
+
+    setTimeout(() => {
+      const inp = document.getElementById('mob_availDate');
+      if (!inp) return;
+      inp.addEventListener('change', () => {
+        const res = document.getElementById('mob_availResults');
+        if (res) res.innerHTML = renderAvailMobile(inp.value||today);
+      });
+    }, 50);
+  }
+
+  else if (id==='eventSchedule') {
+    title = '📅 Events Schedule';
+    const ALL_STATUSES = ['deciding','booked','completed','lost','canceled'];
+    const STATUS_LABELS = {deciding:'Deciding',booked:'Booked',completed:'Completed',lost:'Lost',canceled:'Canceled'};
+    const STATUS_COLORS = {deciding:'#d97706',booked:'#2563eb',completed:'#16a34a',lost:'#6b7280',canceled:'#9ca3af'};
+    const cmap = customerMap();
+
+    function getEvSched(sel) {
+      const selSet = new Set(sel);
+      return (state.events||[]).filter(e => !e.deleted && selSet.has((e.status||'deciding').toLowerCase()))
+        .sort((a,b) => {
+          const da=a.date||'9999-99-99', db=b.date||'9999-99-99';
+          if(da<db) return -1; if(da>db) return 1;
+          return (a.startTime||'')<(b.startTime||'')?-1:1;
+        });
+    }
+
+    function getStaffingLabel(ev) {
+      const a = ev.bartenderAssignments||[];
+      if (a.length > 0) {
+        const barts = a.filter(x=>(x.role||'Bartender').toLowerCase()==='bartender').length;
+        const backs = a.filter(x=>(x.role||'').toLowerCase()==='barback').length;
+        const parts = [];
+        if(barts) parts.push(barts+'B');
+        if(backs) parts.push(backs+'BB');
+        if(a.length-barts-backs>0) parts.push((a.length-barts-backs)+' other');
+        return parts.join(' · ')||a.length+' assigned';
+      }
+      const qb=parseInt(ev.quotedBartenderCount||0)||0, qbb=parseInt(ev.quotedBarbackCount||0)||0;
+      if(qb||qbb) return (qb?qb+'B ':''+(qbb?qbb+'BB':'')).trim()+' (quoted)';
+      return '—';
+    }
+
+    function renderEvSchedRows(evs) {
+      if (!evs.length) return `<div class="empty" style="padding:32px 0;"><div class="empty-icon">🗓</div><div class="empty-title">No events</div><div class="empty-sub">No events match the selected filters.</div></div>`;
+      return evs.map(ev => {
+        const cust = (cmap[ev.customerId]||{}).name||'';
+        const status = (ev.status||'deciding').toLowerCase();
+        const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${STATUS_COLORS[status]||'#999'};margin-right:5px;flex-shrink:0;"></span>`;
+        const staff = getStaffingLabel(ev);
+        const quote = parseFloat(ev.quotationAmount)||0;
+        return `<div class="cell" onclick="closeSheet();setTimeout(()=>openEventDetail('${safe(ev.id)}'),200)">
+          <div class="cell-body">
+            <div class="cell-title">${safe(ev.eventName||'Untitled')}</div>
+            <div class="cell-sub">${fmtDate(ev.date)}${ev.startTime?' · '+fmtTime(ev.startTime):''}${cust?' · '+safe(cust):''}</div>
+            <div class="cell-sub" style="margin-top:2px;">${dot}${STATUS_LABELS[status]||ev.status} · 👥 ${staff}</div>
+          </div>
+          <div class="cell-right" style="text-align:right;">${quote>0?`<span style="font-weight:600;font-size:13px;">${money(quote)}</span>`:''}
+          </div>
+          <span class="cell-chevron">›</span>
+        </div>`;
+      }).join('');
+    }
+
+    const cbHtml = ALL_STATUSES.map(s =>
+      `<label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;padding:6px 10px;background:var(--fill);border-radius:8px;cursor:pointer;">
+        <input type="checkbox" class="evSched-cb" value="${s}" checked style="width:15px;height:15px;">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${STATUS_COLORS[s]};flex-shrink:0;"></span>
+        ${STATUS_LABELS[s]}</label>`
+    ).join('');
+
+    const initEvs = getEvSched(ALL_STATUSES);
+    html = `<div style="padding:12px 16px 0;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--label2);">Filter by status:</div>
+      <div id="evSchedFilters" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">${cbHtml}</div>
+    </div>
+    <div id="evSchedList" class="list" style="margin:0 16px;">${renderEvSchedRows(initEvs)}</div>`;
+
+    setTimeout(() => {
+      const filters = document.getElementById('evSchedFilters');
+      if (!filters) return;
+      filters.addEventListener('change', () => {
+        const sel = [...filters.querySelectorAll('.evSched-cb:checked')].map(c=>c.value);
+        const list = document.getElementById('evSchedList');
+        if (list) list.innerHTML = renderEvSchedRows(getEvSched(sel));
+      });
+    }, 50);
+  }
+
+  else if (id==='balanceDue') {
     title = '💰 Balance Still Due';
     const evs = enrichedEvents().filter(e => {
       const s=(e.status||'').toLowerCase();
