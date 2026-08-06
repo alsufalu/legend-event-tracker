@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260806_102';
+  const BUILD='v20260806_104';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1629,7 +1629,8 @@ function numeric(v) {
   return Number.isFinite(n) ? n : null;
 }
 function formatPhone(value) {
-  const digits = String(value || "").replace(/\D/g, "");
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.length === 11 && digits.charAt(0) === "1") digits = digits.slice(1); // strip US country code
   if (digits.length === 10) return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
   return String(value || "");
 }
@@ -1815,7 +1816,7 @@ function enrichedEvents() {
       totalCosts, profit: projectedProfit, projectedProfit, netProfit, netCollectedAfterCosts,
       barSetup: normalizeBarSetup(e), existingBar: normalizeBarSetup(e) === "existing",
       durationLabel: durationLabel(e.startTime, e.endTime),
-      customerName: (cmap[e.customerId] ? (function(){ const c=cmap[e.customerId]; const digits=(c.phone||"").replace(/\D/g,""); const ph=digits.length===10?digits.slice(0,3)+"-"+digits.slice(3,6)+"-"+digits.slice(6):(digits.length>0?c.phone:""); return c.name+(ph?" ("+ph+")":""); })() : "Unassigned"),
+      customerName: (cmap[e.customerId] ? (function(){ const c=cmap[e.customerId]; const ph=formatPhone(c.phone||""); return c.name+((/^\d{3}-\d{3}-\d{4}$/).test(ph)?" ("+ph+")":""); })() : "Unassigned"),
       bartenderNames: bartenderNames((e.bartenderAssignments || []).map(a => a.id)),
       roiPercent: totalCosts > 0 ? ((quote - totalCosts) / totalCosts) * 100 : null,
     };
@@ -6416,6 +6417,16 @@ renderAll();ensureEditableContractFields();
             return {text:'—', total:0, source:'none'};
           }
 
+          function getCityState(addr){
+            if(!addr) return '—';
+            var parts=addr.split(',').map(function(p){return p.trim();}).filter(Boolean);
+            for(var i=parts.length-1;i>=1;i--){
+              var stateMatch=parts[i].match(/^([A-Za-z]{2})\b/);
+              if(stateMatch){ return parts[i-1]+', '+stateMatch[1].toUpperCase(); }
+            }
+            return '—';
+          }
+
           function renderTable(evts){
             if(!evts.length) return '<tr><td colspan="8" style="padding:16px 10px;text-align:center;color:var(--ink3);">No events match the selected filters.</td></tr>';
             return evts.map(function(ev){
@@ -6429,7 +6440,7 @@ renderAll();ensureEditableContractFields();
                 ?'<span style="font-size:10px;color:var(--ink3);margin-left:4px;">(quoted)</span>'
                 :(staffing.source==='assigned'?'':'');
               var timeStr=ev.startTime?(fmtTime(ev.startTime)+(ev.endTime?' – '+fmtTime(ev.endTime):'')):'—';
-              var quote=parseFloat(ev.quotationAmount)||0;
+              var cityState=getCityState(ev.venueAddress);
               return '<tr>'
                 +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);white-space:nowrap;">'+safe(fmtDate(ev.date))+'</td>'
                 +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+safe(ev.eventName||'Untitled')+'</td>'
@@ -6441,7 +6452,7 @@ renderAll();ensureEditableContractFields();
                   +'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+statusColor+';flex-shrink:0;"></span>'
                   +safe(statusLabel)+'</span></td>'
                 +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(staffing.text)+staffNote+'</td>'
-                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;">'+(quote>0?rMoney(quote):'—')+'</td>'
+                +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'+safe(cityState)+'</td>'
                 +'<td style="padding:9px 10px;border-bottom:1px solid var(--border);">'
                   +'<button type="button" onclick="editEvent(\''+safe(String(ev.id))+'\');if(typeof switchTab===\'function\')switchTab(\'events\');" '
                   +'style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface2);">Open</button>'
@@ -6461,7 +6472,7 @@ renderAll();ensureEditableContractFields();
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);white-space:nowrap;">Time</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Status</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">Staffing</th>'
-            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);text-align:right;">Quote</th>'
+            +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);">City/State</th>'
             +'<th style="padding:9px 10px;border-bottom:2px solid var(--border);"></th>'
             +'</tr></thead>';
 
@@ -6501,7 +6512,16 @@ renderAll();ensureEditableContractFields();
             if(da<db) return -1; if(da>db) return 1;
             return (a.startTime||'')<(b.startTime||'')?-1:1;
           });
-          var headers=['Date','Event Name','Customer','Venue','Address','Start Time','End Time','Status','# Bartenders','# Barbacks','Staffing Source','Quote'];
+          function getCityStateCSV(addr){
+            if(!addr) return '';
+            var parts=addr.split(',').map(function(p){return p.trim();}).filter(Boolean);
+            for(var i=parts.length-1;i>=1;i--){
+              var stateMatch=parts[i].match(/^([A-Za-z]{2})\b/);
+              if(stateMatch){ return parts[i-1]+', '+stateMatch[1].toUpperCase(); }
+            }
+            return '';
+          }
+          var headers=['Date','Event Name','Customer','Venue','Address','City/State','Start Time','End Time','Status','# Bartenders','# Barbacks','Staffing Source'];
           var rows=evts.map(function(ev){
             var cust=(cmap[ev.customerId]||{}).name||'';
             var assignments=ev.bartenderAssignments||[];
@@ -6516,8 +6536,8 @@ renderAll();ensureEditableContractFields();
               source=barts||backs?'Quoted':'None';
             }
             return [ev.date||'',ev.eventName||'',cust,ev.venueName||'',ev.venueAddress||'',
-              ev.startTime||'',ev.endTime||'',ev.status||'',barts,backs,source,
-              Number((parseFloat(ev.quotationAmount)||0).toFixed(2))];
+              getCityStateCSV(ev.venueAddress),
+              ev.startTime||'',ev.endTime||'',ev.status||'',barts,backs,source];
           });
           return [headers].concat(rows).map(function(r){ return r.map(rCsvEsc).join(','); }).join('\n');
         }catch(err){ return ''; }

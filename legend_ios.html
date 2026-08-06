@@ -396,7 +396,7 @@ function safe(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;
 function money(n) { return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtDate(d) { if(!d) return '—'; const p=d.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; }
 function fmtTime(t) { if(!t) return ''; const [hh,mm]=t.split(':'); const h=parseInt(hh,10); return (h%12||12)+':'+(mm||'00')+' '+(h>=12?'PM':'AM'); }
-function fmtPhone(p) { const d=(p||'').replace(/\D/g,''); return d.length===10?`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`:p||'—'; }
+function fmtPhone(p) { let d=(p||'').replace(/\D/g,''); if(d.length===11&&d[0]==='1') d=d.slice(1); return d.length===10?`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`:p||'—'; }
 function generateId() { return Date.now().toString(36)+Math.random().toString(36).slice(2); }
 function customerMap() { return Object.fromEntries((state.customers||[]).map(c=>[c.id,c])); }
 function bartenderMap() { return Object.fromEntries((state.bartenders||[]).map(b=>[b.id,b])); }
@@ -1701,6 +1701,16 @@ function openReport(id) {
       return '—';
     }
 
+    function getCityStateMobile(addr) {
+      if (!addr) return '';
+      const parts = addr.split(',').map(p=>p.trim()).filter(Boolean);
+      for (let i=parts.length-1;i>=1;i--) {
+        const m = parts[i].match(/^([A-Za-z]{2})\b/);
+        if (m) return parts[i-1]+', '+m[1].toUpperCase();
+      }
+      return '';
+    }
+
     function renderEvSchedRows(evs) {
       if (!evs.length) return `<div class="empty" style="padding:32px 0;"><div class="empty-icon">🗓</div><div class="empty-title">No events</div><div class="empty-sub">No events match the selected filters.</div></div>`;
       return evs.map(ev => {
@@ -1708,14 +1718,12 @@ function openReport(id) {
         const status = (ev.status||'deciding').toLowerCase();
         const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${STATUS_COLORS[status]||'#999'};margin-right:5px;flex-shrink:0;"></span>`;
         const staff = getStaffingLabel(ev);
-        const quote = parseFloat(ev.quotationAmount)||0;
+        const cityState = getCityStateMobile(ev.venueAddress);
         return `<div class="cell" onclick="closeSheet();setTimeout(()=>openEventDetail('${safe(ev.id)}'),200)">
           <div class="cell-body">
             <div class="cell-title">${safe(ev.eventName||'Untitled')}</div>
             <div class="cell-sub">${fmtDate(ev.date)}${ev.startTime?' · '+fmtTime(ev.startTime):''}${cust?' · '+safe(cust):''}</div>
-            <div class="cell-sub" style="margin-top:2px;">${dot}${STATUS_LABELS[status]||ev.status} · 👥 ${staff}</div>
-          </div>
-          <div class="cell-right" style="text-align:right;">${quote>0?`<span style="font-weight:600;font-size:13px;">${money(quote)}</span>`:''}
+            <div class="cell-sub" style="margin-top:2px;">${dot}${STATUS_LABELS[status]||ev.status} · 👥 ${staff}${cityState?' · 📍'+safe(cityState):''}</div>
           </div>
           <span class="cell-chevron">›</span>
         </div>`;
