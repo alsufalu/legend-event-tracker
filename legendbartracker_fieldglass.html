@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260712_098';
+  const BUILD='v20260712_099';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1575,7 +1575,7 @@ function normalizeLoadedState(data) {
     if (!Array.isArray(e.bartenderAssignments)) e.bartenderAssignments = [];
     e.bartenderAssignments = e.bartenderAssignments.map(a => ({
       role: "Bartender", actualStartTime: "", actualEndTime: "", breakMinutes: 0,
-      actualHours: "", clockedOutAt: "", travelPay: 0, expenseReimbursement: 0,
+      actualHours: "", scheduledHours: null, clockedOutAt: "", travelPay: 0, expenseReimbursement: 0,
       expenseNotes: "", tips: 0, paidDate: "", paymentMethod: "", ...a
     }));
   });
@@ -1684,6 +1684,7 @@ function getCurrentAssignments() {
     const actualHours = actualHoursManualRaw !== "" && actualHoursManualRaw !== undefined
       ? Number(actualHoursManualRaw)
       : (calculatedActualHours === null ? "" : calculatedActualHours);
+    const scheduledHours = numeric(row.querySelector(".bartender-scheduled-hours")?.value);
     const travelPay = Number(row.querySelector(".bartender-travel-pay")?.value || 0);
     const expenseReimbursement = Number(row.querySelector(".bartender-expense-reimbursement")?.value || 0);
     const expenseNotes = row.querySelector(".bartender-expense-notes")?.value || "";
@@ -1691,7 +1692,7 @@ function getCurrentAssignments() {
     const paid = row.querySelector(".bartender-paid")?.checked || false;
     const paidDate = row.querySelector(".bartender-paid-date")?.value || "";
     const paymentMethod = row.querySelector(".bartender-payment-method")?.value || "";
-    return id ? {id, role, payType, rate, actualStartTime, actualEndTime, breakMinutes, actualHours, travelPay, expenseReimbursement, expenseNotes, tips, paid, paidDate, paymentMethod} : null;
+    return id ? {id, role, payType, rate, actualStartTime, actualEndTime, breakMinutes, actualHours, scheduledHours, travelPay, expenseReimbursement, expenseNotes, tips, paid, paidDate, paymentMethod} : null;
   }).filter(Boolean);
 }
 function calcActualStaffHours(start, end, breakMinutes = 0) {
@@ -1711,6 +1712,8 @@ function eventStaffOvertimeHours(event) {
 function bartenderBillableHours(event, assignment = null) {
   const actual = assignment ? staffActualHours(assignment) : null;
   if (actual !== null) return actual;
+  const scheduled = assignment ? numeric(assignment.scheduledHours) : null;
+  if (scheduled !== null) return scheduled;
   const duration = calcDurationHours(event.startTime, event.endTime);
   if (duration === null) return 0;
   return duration + 1 + eventStaffOvertimeHours(event);
@@ -1935,7 +1938,8 @@ function bartenderOptionHtml(assignment = {}) {
       <div><label class="field-label">Actual start</label><input type="time" class="bartender-actual-start" value="${safe(assignment.actualStartTime || "")}"></div>
       <div><label class="field-label">Actual end</label><input type="time" class="bartender-actual-end" value="${safe(assignment.actualEndTime || "")}"></div>
       <div><label class="field-label">Break min</label><input type="number" min="0" step="5" class="bartender-break-minutes" value="${safe(assignment.breakMinutes ?? 0)}"></div>
-      <div><label class="field-label">Actual hrs</label><input type="number" min="0" step="0.25" class="bartender-actual-hours" value="${safe(assignment.actualHours ?? "")}" placeholder="Auto"></div>
+      <div><label class="field-label">Sched hrs</label><input type="number" min="0" step="0.25" class="bartender-scheduled-hours" value="${safe(assignment.scheduledHours ?? "")}" placeholder="Auto" title="Scheduled hours = event duration + 1 hr setup/cleanup + overtime. Used for payout when Actual hrs is blank. Auto-updates when event times change unless you type your own value."></div>
+      <div><label class="field-label">Actual hrs</label><input type="number" min="0" step="0.25" class="bartender-actual-hours" value="${safe(assignment.actualHours ?? "")}" placeholder="Override"></div>
       <div><label class="field-label">Travel pay</label><input type="number" min="0" step="1" class="bartender-travel-pay" value="${safe(assignment.travelPay ?? 0)}" placeholder="0"></div>
       <div><label class="field-label">Expenses</label><input type="number" min="0" step="1" class="bartender-expense-reimbursement" value="${safe(assignment.expenseReimbursement ?? 0)}" placeholder="0"></div>
       <div><label class="field-label">Tips</label><input type="number" min="0" step="1" class="bartender-tips" value="${safe(assignment.tips ?? 0)}" placeholder="0" title="Tips paid to this employee — pass-through, not counted as profit"></div>
@@ -1945,7 +1949,7 @@ function bartenderOptionHtml(assignment = {}) {
       <div><label class="field-label">Date paid</label><input type="date" class="bartender-paid-date" value="${safe(selectedPaidDate)}"></div>
       <div><label class="field-label">Payment method</label><input class="bartender-payment-method" value="${escapeAttr(selectedPaymentMethod)}" placeholder="Cash, Zelle, Venmo, check"></div>
     </div>
-    <div class="staff-hours-summary">Enter actual start/end after the event. Payroll uses actual hours when entered, otherwise falls back to scheduled duration + 1 setup/cleanup hour. Travel pay and reimbursable expenses are added to this staff member's total payout.</div>
+    <div class="staff-hours-summary">Payout order: Actual hrs → Sched hrs → auto-calculated (event duration + 1 hr setup/cleanup + overtime). Enter Actual hrs after the event to override. Sched hrs auto-updates from event times unless you type your own value.</div>
   `;
 }
 function addBartenderDropdown(assignment = null) {
@@ -1967,6 +1971,10 @@ function addBartenderDropdown(assignment = null) {
   });
   wrap.querySelectorAll("input, select").forEach(el => el.addEventListener("input", refreshStaffPayoutPreviews));
   wrap.querySelectorAll("input, select").forEach(el => el.addEventListener("change", refreshStaffPayoutPreviews));
+  const schedField = wrap.querySelector(".bartender-scheduled-hours");
+  if (schedField) {
+    schedField.addEventListener("input", () => { schedField.dataset.userSet = schedField.value !== "" ? "true" : "false"; });
+  }
   const paidCheckbox = wrap.querySelector(".bartender-paid");
   if (paidCheckbox) {
     paidCheckbox.addEventListener("change", () => {
@@ -2373,9 +2381,30 @@ function clearCustomerForm() { editingCustomerId = null; document.getElementById
 function clearBartenderForm() { editingBartenderId = null; document.getElementById("bName").value = ""; document.getElementById("bPhone").value = ""; document.getElementById("bPayType").value = "hourly"; document.getElementById("bNotes").value = ""; }
 function clearCostForm() { editingCostId = null; document.getElementById("gCostName").value = ""; document.getElementById("gCostCategory").value = ""; document.getElementById("gCostAmount").value = ""; document.getElementById("gCostDate").value = ""; document.getElementById("gCostNotes").value = ""; }
 function refreshStaffPayoutPreviews() {
-  const tempEvent = { startTime: document.getElementById("eStartTime")?.value || "", endTime: document.getElementById("eEndTime")?.value || "", staffOvertimeHours: numeric(document.getElementById("eStaffOvertimeHours")?.value) || 0, bartenderAssignments: getCurrentAssignments() };
+  const startTime = document.getElementById("eStartTime")?.value || "";
+  const endTime   = document.getElementById("eEndTime")?.value || "";
+  const overtime  = numeric(document.getElementById("eStaffOvertimeHours")?.value) || 0;
+  const duration  = calcDurationHours(startTime, endTime);
+  const autoSchedHours = duration !== null ? +(duration + 1 + overtime).toFixed(2) : null;
+  const tempEvent = { startTime, endTime, staffOvertimeHours: overtime, bartenderAssignments: getCurrentAssignments() };
   document.querySelectorAll(".bartender-select-row").forEach(row => {
-    const assignment = { payType: row.querySelector(".bartender-paytype")?.value || "hourly", rate: Number(row.querySelector(".bartender-rate")?.value || 0), actualStartTime: row.querySelector(".bartender-actual-start")?.value || "", actualEndTime: row.querySelector(".bartender-actual-end")?.value || "", breakMinutes: Number(row.querySelector(".bartender-break-minutes")?.value || 0), actualHours: row.querySelector(".bartender-actual-hours")?.value || "", travelPay: Number(row.querySelector(".bartender-travel-pay")?.value || 0), expenseReimbursement: Number(row.querySelector(".bartender-expense-reimbursement")?.value || 0), tips: Number(row.querySelector(".bartender-tips")?.value || 0) };
+    /* Auto-update Sched hrs field if user hasn't manually set it */
+    const schedField = row.querySelector(".bartender-scheduled-hours");
+    if (schedField && schedField.dataset.userSet !== "true" && autoSchedHours !== null) {
+      schedField.value = autoSchedHours;
+    }
+    const assignment = {
+      payType: row.querySelector(".bartender-paytype")?.value || "hourly",
+      rate: Number(row.querySelector(".bartender-rate")?.value || 0),
+      actualStartTime: row.querySelector(".bartender-actual-start")?.value || "",
+      actualEndTime: row.querySelector(".bartender-actual-end")?.value || "",
+      breakMinutes: Number(row.querySelector(".bartender-break-minutes")?.value || 0),
+      actualHours: row.querySelector(".bartender-actual-hours")?.value || "",
+      scheduledHours: schedField?.value || null,
+      travelPay: Number(row.querySelector(".bartender-travel-pay")?.value || 0),
+      expenseReimbursement: Number(row.querySelector(".bartender-expense-reimbursement")?.value || 0),
+      tips: Number(row.querySelector(".bartender-tips")?.value || 0)
+    };
     const preview = row.querySelector(".bartender-payout-preview");
     if (preview) preview.value = money(bartenderAssignmentCost(assignment, tempEvent));
   });
