@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#0f172a"/>
 <title>Legend Event Tracker</title>
 <script>
-  const BUILD='v20260806_101';
+  const BUILD='v20260806_102';
   if(!location.search.includes(BUILD)){location.replace(location.pathname+'?'+BUILD);}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1815,7 +1815,7 @@ function enrichedEvents() {
       totalCosts, profit: projectedProfit, projectedProfit, netProfit, netCollectedAfterCosts,
       barSetup: normalizeBarSetup(e), existingBar: normalizeBarSetup(e) === "existing",
       durationLabel: durationLabel(e.startTime, e.endTime),
-      customerName: (cmap[e.customerId] ? (cmap[e.customerId].name + " (" + (cmap[e.customerId].phone || "") + ")") : "Unassigned"),
+      customerName: (cmap[e.customerId] ? (function(){ const c=cmap[e.customerId]; const digits=(c.phone||"").replace(/\D/g,""); const ph=digits.length===10?digits.slice(0,3)+"-"+digits.slice(3,6)+"-"+digits.slice(6):(digits.length>0?c.phone:""); return c.name+(ph?" ("+ph+")":""); })() : "Unassigned"),
       bartenderNames: bartenderNames((e.bartenderAssignments || []).map(a => a.id)),
       roiPercent: totalCosts > 0 ? ((quote - totalCosts) / totalCosts) * 100 : null,
     };
