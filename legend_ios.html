@@ -1862,11 +1862,17 @@ function openReport(id) {
         <div style="margin-bottom:14px;"><label style="${lbl}">Number of guests</label>
           <input type="number" id="epcGuests" min="1" max="600" placeholder="e.g. 85" style="${inp}">
         </div>
-        <div style="margin-bottom:14px;"><label style="${lbl}">Event duration (hours)</label>
+        <div style="margin-bottom:14px;"><label style="${lbl}">Duration (hours)</label>
           <input type="number" id="epcHours" min="1" max="12" step="0.5" placeholder="e.g. 5" style="${inp}">
         </div>
-        <div style="margin-bottom:20px;"><label style="${lbl}">Event zip code</label>
+        <div style="margin-bottom:14px;"><label style="${lbl}">Event zip code</label>
           <input type="text" id="epcZip" maxlength="5" placeholder="e.g. 60601" style="${inp}">
+        </div>
+        <div style="margin-bottom:14px;"><label style="${lbl}">Client first name</label>
+          <input type="text" id="epcName" placeholder="e.g. Sarah" style="${inp}">
+        </div>
+        <div style="margin-bottom:20px;"><label style="${lbl}">Event type</label>
+          <input type="text" id="epcEventType" placeholder="e.g. wedding reception" style="${inp}">
         </div>
         <button class="btn btn-primary" style="width:100%;font-size:15px;" onclick="epcCalcMobile()">Calculate Price</button>
         <div id="epcMobileResult" style="margin-top:16px;"></div>
@@ -1877,14 +1883,16 @@ function openReport(id) {
 }
 
 function epcCalcMobile() {
-  const guests = parseInt((document.getElementById('epcGuests')?.value||'0'), 10);
-  const hours  = parseFloat((document.getElementById('epcHours')?.value||'0'));
-  const zip    = (document.getElementById('epcZip')?.value||'').trim();
-  const resultEl = document.getElementById('epcMobileResult');
+  const guests    = parseInt((document.getElementById('epcGuests')?.value||'0'), 10);
+  const hours     = parseFloat((document.getElementById('epcHours')?.value||'0'));
+  const zip       = (document.getElementById('epcZip')?.value||'').trim();
+  const firstName = (document.getElementById('epcName')?.value||'').trim();
+  const eventType = (document.getElementById('epcEventType')?.value||'').trim();
+  const resultEl  = document.getElementById('epcMobileResult');
   if (!resultEl) return;
 
   if (!guests || !hours || zip.length < 5) {
-    resultEl.innerHTML = '<div style="color:#dc2626;font-size:14px;padding:8px 0;">Please fill in all three fields.</div>';
+    resultEl.innerHTML = '<div style="color:#dc2626;font-size:14px;padding:8px 0;">Please fill in guests, hours, and zip code.</div>';
     return;
   }
   resultEl.innerHTML = '<div style="font-size:14px;color:var(--ink3);padding:8px 0;">Calculating…</div>';
@@ -1906,9 +1914,7 @@ function epcCalcMobile() {
     return {br:65,hr:33};
   }
   function epcHav(lat1,lon1,lat2,lon2) {
-    const R=3958.8;
-    const dLat=(lat2-lat1)*Math.PI/180;
-    const dLon=(lon2-lon1)*Math.PI/180;
+    const R=3958.8, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
     const a=Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
     return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
   }
@@ -1916,40 +1922,71 @@ function epcCalcMobile() {
   const staff = epcStaff(guests);
   const rates = epcRates(hours);
   const base  = (staff.b*rates.br*hours) + (staff.h*rates.hr*hours);
-  const BLAT=41.7163, BLON=-88.2219; // zip 60564
+  const BLAT=41.7163, BLON=-88.2219;
 
   fetch('https://api.zippopotam.us/us/'+zip)
     .then(r => { if (!r.ok) throw new Error('ZIP "'+zip+'" not found.'); return r.json(); })
     .then(data => {
-      const eLat = parseFloat(data.places[0].latitude);
-      const eLon = parseFloat(data.places[0].longitude);
-      const straightMi = epcHav(BLAT,BLON,eLat,eLon);
-      const driveMi    = Math.round(straightMi*1.25);
-      const travelFee  = Math.round(driveMi*2*0.33*(staff.b+staff.h));
-      const total      = Math.round(base+travelFee);
+      const eLat    = parseFloat(data.places[0].latitude);
+      const eLon    = parseFloat(data.places[0].longitude);
+      const driveMi = Math.round(epcHav(BLAT,BLON,eLat,eLon)*1.25);
+      const travel  = Math.round(driveMi*2*0.55*(staff.b+staff.h));
+      const total   = Math.round(base+travel);
+      const city    = (data.places[0]['place name']||zip)+', '+(data.places[0]['state abbreviation']||'');
 
-      let staffTxt = staff.b+' state licensed bartender'+(staff.b!==1?'s':'');
-      if (staff.h>0) staffTxt += ' & '+staff.h+' helper'+(staff.h!==1?'s':'');
-      const city = (data.places[0]['place name']||zip)+', '+(data.places[0]['state abbreviation']||'');
+      let staffDisp = staff.b+' state licensed bartender'+(staff.b!==1?'s':'');
+      if (staff.h>0) staffDisp += ' & '+staff.h+' helper'+(staff.h!==1?'s':'');
+      let staffMsg = staff.b+' state licensed bartender'+(staff.b!==1?'s':'');
+      if (staff.h>0) staffMsg += ' and '+staff.h+' helper'+(staff.h!==1?'s':'');
+
+      const fn = firstName, et = eventType || 'your event';
+      const msg = (fn ? 'Hi '+fn+', thanks' : 'Thanks')+' for reaching out. We are available for your '+et+'.\n\n'
+        +'We charge a flat hourly rate and don\'t have any add ons, "package" upcharges, limitations or additional fees. We do it all for our flat hourly rate.\n\n'
+        +'The rate for your event will be $'+total+'. That includes '+staffMsg+', garnishes, cocktail napkins and straws, homemade syrups, liquor liability insurance, portable bar (if required), menu development, shopping list, shopping support, and travel.\n\n'
+        +'Please do let us know if you have any questions. Thank you, -Alberto';
 
       const row = (l,v) => `<tr><td style="padding:6px 0;color:var(--ink3);font-size:14px;">${l}</td><td style="text-align:right;font-weight:600;font-size:14px;">${v}</td></tr>`;
       resultEl.innerHTML = `
-        <div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface2);">
+        <div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface2);margin-bottom:12px;">
           <div style="font-size:15px;font-weight:700;margin-bottom:12px;">Price Breakdown</div>
           <table style="width:100%;border-collapse:collapse;">
             ${row('Guests', guests)}
             ${row('Duration', hours+' hrs')}
-            ${row('Staffing', staffTxt)}
+            ${row('Staffing', staffDisp)}
             ${row('Rate', '$'+rates.br+'/hr bartender'+(staff.h>0?', $'+rates.hr+'/hr helper':''))}
             ${row('Base service', '$'+Math.round(base))}
             ${row('Venue', safe(city))}
-            ${row('Travel (~'+driveMi+' mi, '+(staff.b+staff.h)+' staff)', '$'+travelFee)}
+            ${row('Travel (~'+driveMi+' mi, '+(staff.b+staff.h)+' staff)', '$'+travel)}
             <tr style="border-top:2px solid var(--border);">
               <td style="padding:12px 0 4px;font-size:17px;font-weight:700;">Total</td>
               <td style="text-align:right;font-size:17px;font-weight:700;color:#16a34a;padding-top:12px;">$${total}</td>
             </tr>
           </table>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface2);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div style="font-size:15px;font-weight:700;">Message</div>
+            <button id="epcMobCopyBtn" style="font-size:13px;padding:5px 14px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--fg);">Copy</button>
+          </div>
+          <textarea id="epcMobMsg" readonly style="width:100%;height:180px;font-size:14px;line-height:1.6;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--fg);resize:vertical;box-sizing:border-box;font-family:inherit;"></textarea>
         </div>`;
+
+      setTimeout(() => {
+        const ta = document.getElementById('epcMobMsg');
+        if (ta) ta.value = msg;
+        const cb = document.getElementById('epcMobCopyBtn');
+        if (cb) cb.addEventListener('click', () => {
+          const text = ta ? ta.value : msg;
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(() => {
+              cb.textContent = '✓ Copied!'; setTimeout(() => { cb.textContent = 'Copy'; }, 1800);
+            });
+          } else {
+            if (ta) { ta.select(); document.execCommand('copy'); }
+            cb.textContent = '✓ Copied!'; setTimeout(() => { cb.textContent = 'Copy'; }, 1800);
+          }
+        });
+      }, 0);
     })
     .catch(err => {
       resultEl.innerHTML = '<div style="color:#dc2626;font-size:14px;padding:8px 0;">Error: '+String(err.message||err)+'</div>';

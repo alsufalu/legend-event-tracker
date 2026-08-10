@@ -6570,34 +6570,38 @@ renderAll();ensureEditableContractFields();
           var inp='padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:14px;background:var(--surface);color:var(--fg);width:100%;box-sizing:border-box;';
           var lbl='font-size:13px;font-weight:600;display:block;margin-bottom:5px;color:var(--fg);';
           var html=
-            '<div style="max-width:460px;">'
-            +'<div style="margin-bottom:12px;"><label style="'+lbl+'">Number of guests</label>'
+            '<div style="display:flex;gap:28px;align-items:flex-start;">'
+            +'<div style="flex:0 0 230px;min-width:0;">'
+            +'<div style="margin-bottom:11px;"><label style="'+lbl+'">Number of guests</label>'
             +'<input type="number" id="epcGuests" min="1" max="600" placeholder="e.g. 85" style="'+inp+'"></div>'
-            +'<div style="margin-bottom:12px;"><label style="'+lbl+'">Event duration (hours)</label>'
+            +'<div style="margin-bottom:11px;"><label style="'+lbl+'">Duration (hours)</label>'
             +'<input type="number" id="epcHours" min="1" max="12" step="0.5" placeholder="e.g. 5" style="'+inp+'"></div>'
-            +'<div style="margin-bottom:16px;"><label style="'+lbl+'">Event zip code</label>'
+            +'<div style="margin-bottom:11px;"><label style="'+lbl+'">Event zip code</label>'
             +'<input type="text" id="epcZip" maxlength="5" placeholder="e.g. 60601" style="'+inp+'"></div>'
-            +'<button type="button" id="epcCalcBtn" class="primary" style="padding:10px 26px;font-size:14px;font-weight:600;">Calculate Price</button>'
-            +'<div id="epcResult" style="margin-top:16px;"></div>'
+            +'<div style="margin-bottom:11px;"><label style="'+lbl+'">Client first name</label>'
+            +'<input type="text" id="epcName" placeholder="e.g. Sarah" style="'+inp+'"></div>'
+            +'<div style="margin-bottom:16px;"><label style="'+lbl+'">Event type</label>'
+            +'<input type="text" id="epcEventType" placeholder="e.g. wedding reception" style="'+inp+'"></div>'
+            +'<button type="button" id="epcCalcBtn" class="primary" style="padding:10px 0;font-size:14px;font-weight:600;width:100%;">Calculate Price</button>'
+            +'</div>'
+            +'<div id="epcResult" style="flex:1;min-width:0;"></div>'
             +'</div>';
 
           setTimeout(function(){
             var btn=document.getElementById('epcCalcBtn');
             if(!btn) return;
-            btn.addEventListener('click', function(){
+            btn.addEventListener('click',function(){
               var guests=parseInt((document.getElementById('epcGuests').value||'0'),10);
               var hours=parseFloat((document.getElementById('epcHours').value||'0'));
               var zip=(document.getElementById('epcZip').value||'').trim();
+              var firstName=(document.getElementById('epcName').value||'').trim();
+              var eventType=(document.getElementById('epcEventType').value||'').trim();
               var resultEl=document.getElementById('epcResult');
-
               if(!guests||!hours||zip.length<5){
-                resultEl.innerHTML='<div style="color:#dc2626;font-size:13px;padding:8px 0;">Please fill in all three fields.</div>';
+                resultEl.innerHTML='<div style="color:#dc2626;font-size:13px;padding:8px 0;">Please fill in guests, hours, and zip code.</div>';
                 return;
               }
-
               resultEl.innerHTML='<div style="font-size:13px;color:var(--ink3);padding:8px 0;">Calculating…</div>';
-
-              /* Staffing table */
               function epcStaff(g){
                 if(g<=50)  return {b:1,h:0};
                 if(g<=75)  return {b:1,h:1};
@@ -6608,60 +6612,73 @@ renderAll();ensureEditableContractFields();
                 if(g<=400) return {b:4,h:0};
                 return {b:4,h:1};
               }
-              /* Rate table (exact boundary: ≤3→$80, ≤4→$75, ≤5→$70, >5→$65) */
               function epcRates(hr){
                 if(hr<=3) return {br:80,hr:40};
                 if(hr<=4) return {br:75,hr:38};
                 if(hr<=5) return {br:70,hr:35};
                 return {br:65,hr:33};
               }
-              /* Haversine distance in miles */
-              function epcHav(lat1,lon1,lat2,lon2){
-                var R=3958.8;
-                var dLat=(lat2-lat1)*Math.PI/180;
-                var dLon=(lon2-lon1)*Math.PI/180;
-                var a=Math.sin(dLat/2)*Math.sin(dLat/2)
-                     +Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)
-                     *Math.sin(dLon/2)*Math.sin(dLon/2);
-                return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+              function epcHav(a,b,c,d){
+                var R=3958.8,dL=(c-a)*Math.PI/180,dO=(d-b)*Math.PI/180;
+                var x=Math.sin(dL/2)*Math.sin(dL/2)+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dO/2)*Math.sin(dO/2);
+                return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
               }
-
-              var staff=epcStaff(guests);
-              var rates=epcRates(hours);
+              var staff=epcStaff(guests),rates=epcRates(hours);
               var base=(staff.b*rates.br*hours)+(staff.h*rates.hr*hours);
-              /* Base zip 60564 (Naperville, IL) */
-              var BLAT=41.7163, BLON=-88.2219;
-
+              var BLAT=41.7163,BLON=-88.2219;
               fetch('https://api.zippopotam.us/us/'+zip)
-                .then(function(r){ if(!r.ok) throw new Error('ZIP "'+zip+'" not found.'); return r.json(); })
+                .then(function(r){if(!r.ok) throw new Error('ZIP "'+zip+'" not found.');return r.json();})
                 .then(function(data){
-                  var eLat=parseFloat(data.places[0].latitude);
-                  var eLon=parseFloat(data.places[0].longitude);
-                  var straightMi=epcHav(BLAT,BLON,eLat,eLon);
-                  var driveMi=Math.round(straightMi*1.25);
-                  var travelFee=Math.round(driveMi*2*0.33*(staff.b+staff.h));
-                  var total=Math.round(base+travelFee);
-
-                  var staffTxt=staff.b+' state licensed bartender'+(staff.b!==1?'s':'');
-                  if(staff.h>0) staffTxt+=' & '+staff.h+' helper'+(staff.h!==1?'s':'');
+                  var eLat=parseFloat(data.places[0].latitude),eLon=parseFloat(data.places[0].longitude);
+                  var driveMi=Math.round(epcHav(BLAT,BLON,eLat,eLon)*1.25);
+                  var travel=Math.round(driveMi*2*0.55*(staff.b+staff.h));
+                  var total=Math.round(base+travel);
                   var city=(data.places[0]['place name']||zip)+', '+(data.places[0]['state abbreviation']||'');
-
-                  var row=function(lbl,val){ return '<tr><td style="padding:5px 0;color:var(--ink3);">'+lbl+'</td><td style="text-align:right;font-weight:600;">'+val+'</td></tr>'; };
+                  var staffDisp=staff.b+' state licensed bartender'+(staff.b!==1?'s':'');
+                  if(staff.h>0) staffDisp+=' & '+staff.h+' helper'+(staff.h!==1?'s':'');
+                  var staffMsg=staff.b+' state licensed bartender'+(staff.b!==1?'s':'');
+                  if(staff.h>0) staffMsg+=' and '+staff.h+' helper'+(staff.h!==1?'s':'');
+                  var fn=firstName,et=eventType||'your event';
+                  var msg=(fn?'Hi '+fn+', thanks':'Thanks')+' for reaching out. We are available for your '+et+'.\n\n'
+                    +'We charge a flat hourly rate and don\'t have any add ons, "package" upcharges, limitations or additional fees. We do it all for our flat hourly rate.\n\n'
+                    +'The rate for your event will be $'+total+'. That includes '+staffMsg+', garnishes, cocktail napkins and straws, homemade syrups, liquor liability insurance, portable bar (if required), menu development, shopping list, shopping support, and travel.\n\n'
+                    +'Please do let us know if you have any questions. Thank you, -Alberto';
+                  var row=function(l,v){return '<tr><td style="padding:5px 0;color:var(--ink3);">'+l+'</td><td style="text-align:right;font-weight:600;">'+v+'</td></tr>';};
                   resultEl.innerHTML=
-                    '<div style="border:1px solid var(--border);border-radius:10px;padding:18px;background:var(--surface2);">'
-                    +'<div style="font-size:14px;font-weight:700;margin-bottom:12px;">Price Breakdown</div>'
+                    '<div style="border:1px solid var(--border);border-radius:10px;padding:16px;background:var(--surface2);margin-bottom:14px;">'
+                    +'<div style="font-size:14px;font-weight:700;margin-bottom:10px;">Price Breakdown</div>'
                     +'<table style="width:100%;font-size:13px;border-collapse:collapse;">'
-                    +row('Guests', guests)
-                    +row('Duration', hours+' hrs')
-                    +row('Staffing', staffTxt)
-                    +row('Rate', '$'+rates.br+'/hr bartender'+(staff.h>0?', $'+rates.hr+'/hr helper':''))
-                    +row('Base service', '$'+Math.round(base))
-                    +row('Venue', safe(city))
-                    +row('Travel (~'+driveMi+' mi, '+(staff.b+staff.h)+' staff)', '$'+travelFee)
-                    +'<tr style="border-top:2px solid var(--border);">'
-                    +'<td style="padding:10px 0 4px;font-size:15px;font-weight:700;">Total</td>'
-                    +'<td style="text-align:right;font-size:15px;font-weight:700;color:#16a34a;">$'+total+'</td>'
-                    +'</tr></table></div>';
+                    +row('Guests',guests)
+                    +row('Duration',hours+' hrs')
+                    +row('Staffing',safe(staffDisp))
+                    +row('Rate','$'+rates.br+'/hr bartender'+(staff.h>0?', $'+rates.hr+'/hr helper':''))
+                    +row('Base service','$'+Math.round(base))
+                    +row('Venue',safe(city))
+                    +row('Travel (~'+driveMi+' mi, '+(staff.b+staff.h)+' staff)','$'+travel)
+                    +'<tr style="border-top:2px solid var(--border);"><td style="padding:10px 0 4px;font-size:15px;font-weight:700;">Total</td>'
+                    +'<td style="text-align:right;font-size:15px;font-weight:700;color:#16a34a;">$'+total+'</td></tr>'
+                    +'</table></div>'
+                    +'<div style="border:1px solid var(--border);border-radius:10px;padding:16px;background:var(--surface2);">'
+                    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+                    +'<div style="font-size:14px;font-weight:700;">Message</div>'
+                    +'<button type="button" id="epcCopyBtn" style="font-size:12px;padding:4px 12px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;color:var(--fg);">Copy</button>'
+                    +'</div>'
+                    +'<textarea id="epcMsg" readonly style="width:100%;height:175px;font-size:13px;line-height:1.6;padding:10px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--fg);resize:vertical;box-sizing:border-box;font-family:inherit;"></textarea>'
+                    +'</div>';
+                  setTimeout(function(){
+                    var ta=document.getElementById('epcMsg');
+                    if(ta) ta.value=msg;
+                    var cb=document.getElementById('epcCopyBtn');
+                    if(cb) cb.addEventListener('click',function(){
+                      var text=ta?ta.value:msg;
+                      if(navigator.clipboard){
+                        navigator.clipboard.writeText(text).then(function(){cb.textContent='✓ Copied!';setTimeout(function(){cb.textContent='Copy';},1800);});
+                      } else {
+                        if(ta){ta.select();document.execCommand('copy');}
+                        cb.textContent='✓ Copied!';setTimeout(function(){cb.textContent='Copy';},1800);
+                      }
+                    });
+                  },0);
                 })
                 .catch(function(err){
                   resultEl.innerHTML='<div style="color:#dc2626;font-size:13px;padding:8px 0;">Error: '+String(err.message||err)+'</div>';
