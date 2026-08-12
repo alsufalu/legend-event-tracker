@@ -2823,7 +2823,7 @@ function contractFileSafeName(text){return String(text||"contract").trim().repla
 function barSetupContractDescription(event){const setup=normalizeBarSetup(event);if(setup==="existing")return "Use of existing bar on site";if(setup==="other")return "Bar setup as agreed with client";return "Portable / mobile bar";}
 function buildContractServiceItems(event) {
   const items=[]; const duration=calcDurationHours(event.startTime,event.endTime)||0;
-  const assignedBartenders=(event.bartenderAssignments||[]).length||0; const enteredBartenderCount=numeric(event.contractBartenderCount);
+  const assignedBartenders=(event.bartenderAssignments||[]).filter(a=>(a.role||'Bartender').toLowerCase()==='bartender').length||0; const enteredBartenderCount=numeric(event.contractBartenderCount);
   const bartenderCount=enteredBartenderCount||assignedBartenders||1; const bartenderRate=numeric(event.contractBartenderRate)??70; const bartenderSetupHours=numeric(event.contractBartenderSetupHours)??1;
   const barbackCount=numeric(event.contractBarbackCount)||0; const barbackRate=numeric(event.contractBarbackRate)??25; const barbackSetupHours=numeric(event.contractBarbackSetupHours)??1;
   function addItem(description,staffCount,qtyHours,rate){const qty=Number(qtyHours||0);const count=Number(staffCount||0);const unitRate=Number(rate||0);if(count<=0||qty<=0||unitRate<=0)return;items.push({description,staffCount:count,qtyHours:qty,rate:unitRate,lineTotal:count*qty*unitRate});}
@@ -6623,8 +6623,9 @@ renderAll();ensureEditableContractFields();
                 var x=Math.sin(dL/2)*Math.sin(dL/2)+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dO/2)*Math.sin(dO/2);
                 return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
               }
-              var staff=epcStaff(guests),rates=epcRates(hours);
-              var base=(staff.b*rates.br*hours)+(staff.h*rates.hr*hours);
+              var billingHours=hours+1; // +1 hr for 30min setup + 30min cleanup
+              var staff=epcStaff(guests),rates=epcRates(billingHours);
+              var base=(staff.b*rates.br*billingHours)+(staff.h*rates.hr*billingHours);
               var BLAT=41.7163,BLON=-88.2219;
               fetch('https://api.zippopotam.us/us/'+zip)
                 .then(function(r){if(!r.ok) throw new Error('ZIP "'+zip+'" not found.');return r.json();})
@@ -6641,7 +6642,7 @@ renderAll();ensureEditableContractFields();
                   var fn=firstName,et=eventType||'your event';
                   var msg=(fn?'Hi '+fn+', thanks':'Thanks')+' for reaching out. We are available for your '+et+'.\n\n'
                     +'We charge a flat hourly rate and don\'t have any add ons, "package" upcharges, limitations or additional fees. We do it all for our flat hourly rate.\n\n'
-                    +'The rate for your event will be $'+total+'. That includes '+staffMsg+', garnishes, cocktail napkins and straws, homemade syrups, liquor liability insurance, portable bar (if required), menu development, shopping list, shopping support, and travel.\n\n'
+                    +'The rate for your '+hours+' hour event will be $'+total+'. That includes '+staffMsg+', garnishes, cocktail napkins and straws, homemade syrups, liquor liability insurance, portable bar (if required), menu development, shopping list, shopping support, and travel.\n\n'
                     +'Please do let us know if you have any questions. Thank you, -Alberto';
                   var row=function(l,v){return '<tr><td style="padding:5px 0;color:var(--ink3);">'+l+'</td><td style="text-align:right;font-weight:600;">'+v+'</td></tr>';};
                   resultEl.innerHTML=
