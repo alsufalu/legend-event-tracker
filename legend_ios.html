@@ -273,7 +273,7 @@ const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 const TABLE = 'bar_tracker_data';
 
 // ─── State ───────────────────────────────────────────────
-let state = { events:[], customers:[], bartenders:[], costs:[] };
+let state = { events:[], customers:[], bartenders:[], costs:[], blackoutDates:[] };
 let currentUser = null;
 let currentTab = 'home';
 let eventsFilter = 'all';
@@ -340,7 +340,7 @@ async function loadFromCloud() {
   const cloudTs = res.data.updated_at ? new Date(res.data.updated_at).getTime() : 0;
   const localTs = state._updatedAt ? new Date(state._updatedAt).getTime() : 0;
   if (cloudTs >= localTs) {
-    state = { events:[], customers:[], bartenders:[], costs:[], ...loaded };
+    state = { events:[], customers:[], bartenders:[], costs:[], blackoutDates:[], ...loaded };
   } else {
     /* Local is newer — push up */
     const now = new Date().toISOString();
@@ -375,7 +375,7 @@ async function checkForRemoteUpdates() {
     if (cloudTs > localTs + 5000) {
       const full = await sb.from(TABLE).select('data,updated_at').eq('id', currentUser.id).maybeSingle();
       if (full.data?.data) {
-        state = { events:[], customers:[], bartenders:[], costs:[], ...full.data.data };
+        state = { events:[], customers:[], bartenders:[], costs:[], blackoutDates:[], ...full.data.data };
         switchTab(currentTab, true);
       }
     }
@@ -470,8 +470,23 @@ function eventFinancials(ev) {
   const balance = Math.max(0,quote+reimb-collected);
   const staffCost = (ev.bartenderAssignments||[]).reduce((s,a)=>s+bartenderAssignmentCost(a,ev),0);
   const tips = eventTipTotal(ev);
-  const profit = collected-staffCost;
-  return { quote, reimb, deposit, final, collected, balance, staffCost, tips, profit };
+  // Split staffCost into base labor only vs travel pay (tips are pass-through, excluded from profit)
+  const baseLaborOnly = (ev.bartenderAssignments||[]).reduce((s,a) => {
+    const rate = Number(a.rate||0);
+    if ((a.payType||'hourly')==='flat') return s + rate;
+    let hrs = Number(a.actualHours||a.hours||0);
+    if (!hrs && ev.startTime && ev.endTime) {
+      const [sh,sm]=ev.startTime.split(':').map(Number);
+      const [eh,em]=ev.endTime.split(':').map(Number);
+      hrs = Math.max(0,(eh*60+em-sh*60-sm)/60);
+    }
+    const otHrs = Number(a.overtimeHours||0);
+    const otRate = Number(a.overtimeRate||rate*1.5);
+    return s + rate*Math.max(0,hrs-otHrs)+otRate*otHrs;
+  }, 0);
+  const travelPay = (ev.bartenderAssignments||[]).reduce((s,a)=>s+(Number(a.travelPay||0)||0)+(Number(a.expenseReimbursement||0)||0), 0);
+  const profit = collected - baseLaborOnly - travelPay;  /* tips excluded — pass-through */
+  return { quote, reimb, deposit, final, collected, balance, staffCost, baseLaborOnly, travelPay, tips, profit };
 }
 
 function todayStr() { return new Date().toISOString().slice(0,10); }
@@ -668,6 +683,16 @@ function iosCalMonthHtml() {
   const byDate = {};
   evs.forEach(e => { if (e.date) { (byDate[e.date] = byDate[e.date]||[]).push(e); } });
 
+  const blackouts = new Set(state.blackoutDates || []);
+  // Build date → staff-off names map
+  const staffOffByDate = {};
+  (state.bartenders || []).forEach(b => {
+    (b.unavailableDates || []).forEach(d => {
+      if (!staffOffByDate[d]) staffOffByDate[d] = [];
+      staffOffByDate[d].push(b.name || 'Staff');
+    });
+  });
+
   const yr = iosCalCursor.getFullYear(), mo = iosCalCursor.getMonth();
   const monthLabel = iosCalCursor.toLocaleDateString('en-US', { month:'long', year:'numeric' });
   const today = new Date(); const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
@@ -689,16 +714,23 @@ function iosCalMonthHtml() {
     const isToday = key === todayKey;
     const isSelected = key === iosCalSelectedDate;
     const dayEvs = byDate[key] || [];
+    const isBlackout = blackouts.has(key);
+    const offStaff = staffOffByDate[key] || [];
     const dateStr = JSON.stringify(key);
+
+    let bg = isSelected ? 'var(--primary)' : isBlackout ? 'rgba(220,38,38,0.10)' : isToday ? 'rgba(var(--primary-rgb,0,122,255),0.12)' : 'var(--fill)';
+    let borderColor = isSelected ? 'var(--primary)' : isBlackout ? '#fca5a5' : 'transparent';
 
     grid += `<div onclick="iosCalSelectedDate=${dateStr};document.getElementById('iosCalDay').innerHTML=iosCalDayEventsHtml(${dateStr});" style="
       min-height:52px;border-radius:10px;padding:4px;cursor:pointer;text-align:center;
-      background:${isSelected?'var(--primary)':isToday?'rgba(var(--primary-rgb,0,122,255),0.12)':'var(--fill)'};
-      opacity:${inMonth?1:0.35};border:${isSelected?'2px solid var(--primary)':'2px solid transparent'};
+      background:${bg};
+      opacity:${inMonth?1:0.35};border:${isSelected?'2px solid var(--primary)':`2px solid ${borderColor}`};
     ">
-      <div style="font-size:13px;font-weight:${isToday?700:500};color:${isSelected?'#fff':isToday?'var(--primary)':'var(--label)'};">${cur.getDate()}</div>
+      <div style="font-size:13px;font-weight:${isToday?700:500};color:${isSelected?'#fff':isBlackout?'#b91c1c':isToday?'var(--primary)':'var(--label)'};">${cur.getDate()}</div>
       <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:2px;margin-top:2px;">
-        ${dayEvs.slice(0,3).map(e=>`<div style="width:6px;height:6px;border-radius:50%;background:${STATUS_COLORS[(e.status||'').toLowerCase()]||'var(--primary)'};"></div>`).join('')}
+        ${isBlackout ? `<div style="font-size:9px;color:${isSelected?'#fff':'#b91c1c'};font-weight:700;">🚫</div>` : ''}
+        ${offStaff.length>0 && !isBlackout ? `<div style="font-size:9px;color:${isSelected?'#fff':'#92400e'};font-weight:700;">⚠️</div>` : ''}
+        ${dayEvs.slice(0,isBlackout||offStaff.length?2:3).map(e=>`<div style="width:6px;height:6px;border-radius:50%;background:${STATUS_COLORS[(e.status||'').toLowerCase()]||'var(--primary)'};"></div>`).join('')}
         ${dayEvs.length>3?`<div style="font-size:9px;color:${isSelected?'#fff':'var(--label2)'};">+${dayEvs.length-3}</div>`:''}
       </div>
     </div>`;
@@ -712,6 +744,7 @@ function iosCalMonthHtml() {
     <div style="display:flex;align-items:center;padding:10px 16px 6px;gap:8px;">
       <button onclick="iosCalCursor.setMonth(iosCalCursor.getMonth()-1);renderTab('events')" style="background:var(--fill);border:none;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer;">‹</button>
       <div style="flex:1;text-align:center;font-weight:700;font-size:16px;">${monthLabel}</div>
+      <button onclick="openBlackoutSheet()" style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;color:#b91c1c;cursor:pointer;">🚫 Blackouts</button>
       <button onclick="iosCalCursor.setMonth(iosCalCursor.getMonth()+1);renderTab('events')" style="background:var(--fill);border:none;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer;">›</button>
     </div>
     ${grid}
@@ -723,9 +756,14 @@ function iosCalMonthHtml() {
 function iosCalDayEventsHtml(dateKey) {
   let evs = enrichedEvents(true).filter(e => e.date === dateKey);
   if (eventsFilter !== 'all') evs = evs.filter(e => (e.status||'').toLowerCase() === eventsFilter);
-  if (!evs.length) return `<div style="text-align:center;color:var(--label2);padding:16px;font-size:14px;">No events on this day</div>`;
   const label = new Date(dateKey+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  return `<div><div style="font-weight:600;font-size:14px;margin-bottom:6px;color:var(--label);">${label}</div>
+  const isBlackout = (state.blackoutDates||[]).includes(dateKey);
+  const offStaff = (state.bartenders||[]).filter(b=>(b.unavailableDates||[]).includes(dateKey)).map(b=>b.name||'Staff');
+  let notices = '';
+  if (isBlackout) notices += `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:13px;font-weight:700;color:#b91c1c;">🚫 Blackout Date — do not book events</div>`;
+  if (offStaff.length) notices += `<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:13px;color:#92400e;"><strong>⚠️ Staff off:</strong> ${offStaff.map(n=>safe(n)).join(', ')}</div>`;
+  if (!evs.length) return `<div><div style="font-weight:600;font-size:14px;margin-bottom:6px;color:var(--label);">${label}</div>${notices}<div style="text-align:center;color:var(--label2);padding:16px;font-size:14px;">No events on this day</div></div>`;
+  return `<div><div style="font-weight:600;font-size:14px;margin-bottom:6px;color:var(--label);">${label}</div>${notices}
     <div class="list">${evs.map(e=>eventCell(e)).join('')}</div></div>`;
 }
 
@@ -845,6 +883,73 @@ function handleSheetBgClick(e) {
   if (e.target === document.getElementById('sheetBg')) closeSheet();
 }
 
+// ─── Blackout Dates (mobile) ──────────────────────────────
+function openBlackoutSheet() {
+  openSheet('🚫 Blackout Dates', buildBlackoutSheetHtml(), 'Done');
+}
+function buildBlackoutSheetHtml() {
+  const dates = (state.blackoutDates||[]).slice().sort();
+  const listHtml = dates.length
+    ? dates.map(d => {
+        const label = new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--separator);">
+          <span style="font-size:14px;">📅 ${label}</span>
+          <button onclick="removeBlackoutDateMobile('${d}')" style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:4px 10px;font-size:13px;color:#b91c1c;cursor:pointer;">Remove</button>
+        </div>`;
+      }).join('')
+    : `<div style="text-align:center;color:var(--label2);padding:16px;font-size:14px;">No blackout dates set.</div>`;
+  return `<div style="padding:4px 0 12px;">
+    <p style="font-size:13px;color:var(--label2);margin-bottom:16px;">Dates when you do not want to book events. They appear highlighted in red on the calendar.</p>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <input type="date" id="mobileBlackoutInput" style="flex:1;padding:8px 10px;border:1px solid var(--separator);border-radius:10px;font-size:15px;background:var(--fill);color:var(--label);">
+      <button onclick="addBlackoutDateMobile()" style="background:var(--primary);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:14px;font-weight:600;cursor:pointer;">Add</button>
+    </div>
+    <div id="mobileBlackoutList">${listHtml}</div>
+  </div>`;
+}
+function addBlackoutDateMobile() {
+  const inp = document.getElementById('mobileBlackoutInput');
+  if (!inp || !inp.value) return;
+  const d = inp.value;
+  if (!(state.blackoutDates||[]).includes(d)) {
+    state.blackoutDates = [...(state.blackoutDates||[]), d];
+    scheduleSync();
+  }
+  inp.value = '';
+  document.getElementById('mobileBlackoutList').innerHTML = buildBlackoutSheetHtml().match(/<div id="mobileBlackoutList">([\s\S]*)<\/div>\s*<\/div>$/)?.[1] || '';
+  // Refresh list inline without closing sheet
+  const listEl = document.getElementById('mobileBlackoutList');
+  if (listEl) {
+    const dates2 = (state.blackoutDates||[]).slice().sort();
+    listEl.innerHTML = dates2.length
+      ? dates2.map(d2 => {
+          const label = new Date(d2+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--separator);">
+            <span style="font-size:14px;">📅 ${label}</span>
+            <button onclick="removeBlackoutDateMobile('${d2}')" style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:4px 10px;font-size:13px;color:#b91c1c;cursor:pointer;">Remove</button>
+          </div>`;
+        }).join('')
+      : `<div style="text-align:center;color:var(--label2);padding:16px;font-size:14px;">No blackout dates set.</div>`;
+  }
+}
+function removeBlackoutDateMobile(d) {
+  state.blackoutDates = (state.blackoutDates||[]).filter(x=>x!==d);
+  scheduleSync();
+  const listEl = document.getElementById('mobileBlackoutList');
+  if (listEl) {
+    const dates2 = (state.blackoutDates||[]).slice().sort();
+    listEl.innerHTML = dates2.length
+      ? dates2.map(d2 => {
+          const label = new Date(d2+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--separator);">
+            <span style="font-size:14px;">📅 ${label}</span>
+            <button onclick="removeBlackoutDateMobile('${d2}')" style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:4px 10px;font-size:13px;color:#b91c1c;cursor:pointer;">Remove</button>
+          </div>`;
+        }).join('')
+      : `<div style="text-align:center;color:var(--label2);padding:16px;font-size:14px;">No blackout dates set.</div>`;
+  }
+}
+
 // ─── Event Detail ─────────────────────────────────────────
 function openEventDetail(id) {
   const ev = (state.events||[]).find(e=>e.id===id);
@@ -860,10 +965,10 @@ function openEventDetail(id) {
       ${ev.startTime?`<div class="detail-row"><span class="detail-lbl">Time</span><span class="detail-val">${safe(ev.startTime)}${ev.endTime?' – '+safe(ev.endTime):''}</span></div>`:''}
       <div class="detail-row"><span class="detail-lbl">Status</span><span class="detail-val"><span class="pill ${pillClass(ev.status)}">${safe(ev.status||'booked')}</span></span></div>
       <div class="detail-row"><span class="detail-lbl">Customer</span><span class="detail-val">${safe(cust.name||'Unassigned')}</span></div>
-      ${cust.phone?`<div class="detail-row"><span class="detail-lbl">Phone</span><span class="detail-val"><a href="tel:${safe(cust.phone)}" style="color:var(--primary);text-decoration:none;">${safe(fmtPhone(cust.phone))}</a></span></div>`:''}
+      ${(cust.phone||ev.customerPhone)?`<div class="detail-row"><span class="detail-lbl">Phone</span><span class="detail-val"><a href="tel:${safe(cust.phone||ev.customerPhone)}" style="color:var(--primary);text-decoration:none;">${safe(fmtPhone(cust.phone||ev.customerPhone))}</a></span></div>`:''}
       ${(ev.category||ev.eventType)?`<div class="detail-row"><span class="detail-lbl">Category</span><span class="detail-val">${safe(ev.category||ev.eventType)}</span></div>`:''}
       ${ev.venueName||ev.location?`<div class="detail-row"><span class="detail-lbl">Venue</span><span class="detail-val">${safe(ev.venueName||ev.location||'')}</span></div>`:''}
-      ${ev.venueAddress?`<div class="detail-row"><span class="detail-lbl">Address</span><span class="detail-val"><a href="https://maps.apple.com/?q=${encodeURIComponent(ev.venueAddress)}" style="color:var(--primary);text-decoration:none;">${safe(ev.venueAddress)}</a></span></div>`:''}
+      ${ev.venueAddress?`<div class="detail-row"><span class="detail-lbl">Address</span><span class="detail-val" style="display:flex;align-items:flex-start;gap:10px;"><a href="https://maps.apple.com/?q=${encodeURIComponent(ev.venueAddress)}" style="color:var(--primary);text-decoration:none;flex:1;">${safe(ev.venueAddress)}</a><button onclick="navigator.clipboard.writeText(${JSON.stringify(ev.venueAddress)}).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='Copy',1500)})" style="flex-shrink:0;font-size:12px;padding:2px 8px;border:1px solid var(--border,#ccc);border-radius:6px;background:var(--bg2,#f5f5f7);color:var(--label,#555);cursor:pointer;">Copy</button></span></div>`:''}
       ${ev.guestCount?`<div class="detail-row"><span class="detail-lbl">Guests</span><span class="detail-val">${safe(ev.guestCount)}</span></div>`:''}
     </div>
   </div>`;
@@ -895,7 +1000,8 @@ function openEventDetail(id) {
 
   html += `<div class="section"><div class="section-hdr">Costs &amp; Profit</div>
     <div class="detail-list">
-      <div class="detail-row"><span class="detail-lbl">Staff Cost</span><span class="detail-val">${money(fin.staffCost)}</span></div>
+      <div class="detail-row"><span class="detail-lbl">Employee Labor</span><span class="detail-val">${money(fin.baseLaborOnly)}</span></div>
+      ${fin.travelPay>0?`<div class="detail-row"><span class="detail-lbl">Travel Pay</span><span class="detail-val">${money(fin.travelPay)}</span></div>`:''}
       ${fin.tips>0?`<div class="detail-row"><span class="detail-lbl">Tips Paid Out</span><span class="detail-val">${money(fin.tips)} <span style="font-size:11px;color:var(--label2);">pass-through</span></span></div>`:''}
       ${evCosts>0?`<div class="detail-row"><span class="detail-lbl">Event Costs/COGS</span><span class="detail-val">${money(evCosts)}</span></div>`:''}
       ${adCost>0?`<div class="detail-row"><span class="detail-lbl">Advertising</span><span class="detail-val">${money(adCost)}</span></div>`:''}
@@ -1919,9 +2025,10 @@ function epcCalcMobile() {
     return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
   }
 
+  const billingHours = hours + 1; // +1 hr for 30min setup + 30min cleanup
   const staff = epcStaff(guests);
-  const rates = epcRates(hours);
-  const base  = (staff.b*rates.br*hours) + (staff.h*rates.hr*hours);
+  const rates = epcRates(billingHours);
+  const base  = (staff.b*rates.br*billingHours) + (staff.h*rates.hr*billingHours);
   const BLAT=41.7163, BLON=-88.2219;
 
   fetch('https://api.zippopotam.us/us/'+zip)
@@ -1942,7 +2049,7 @@ function epcCalcMobile() {
       const fn = firstName, et = eventType || 'your event';
       const msg = (fn ? 'Hi '+fn+', thanks' : 'Thanks')+' for reaching out. We are available for your '+et+'.\n\n'
         +'We charge a flat hourly rate and don\'t have any add ons, "package" upcharges, limitations or additional fees. We do it all for our flat hourly rate.\n\n'
-        +'The rate for your event will be $'+total+'. That includes '+staffMsg+', garnishes, cocktail napkins and straws, homemade syrups, liquor liability insurance, portable bar (if required), menu development, shopping list, shopping support, and travel.\n\n'
+        +'The rate for your '+hours+' hour event will be $'+total+'. That includes '+staffMsg+', garnishes, cocktail napkins and straws, homemade syrups, liquor liability insurance, portable bar (if required), menu development, shopping list, shopping support, and travel.\n\n'
         +'Please do let us know if you have any questions. Thank you, -Alberto';
 
       const row = (l,v) => `<tr><td style="padding:6px 0;color:var(--ink3);font-size:14px;">${l}</td><td style="text-align:right;font-weight:600;font-size:14px;">${v}</td></tr>`;
