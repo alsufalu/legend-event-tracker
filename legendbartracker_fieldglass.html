@@ -1032,6 +1032,29 @@ tr:hover td { background:var(--surface2); }
             <div class="row four" style="margin-bottom:10px;">
               <div class="field-wrap"><label class="field-label" for="eQMandatoryTips">Mandatory tips ($) <span style="font-weight:400;color:var(--ink3);">— "20% tips for bartender(s)"</span></label><input id="eQMandatoryTips" type="number" min="0" step="0.01" placeholder="Leave blank to omit from contract"></div>
             </div>
+
+            <div style="border-top:1px solid var(--border);margin:12px 0 10px;padding-top:12px;">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin-bottom:10px;">Additional Time &amp; Invoicing</div>
+              <div class="row four" style="margin-bottom:10px;">
+                <div class="field-wrap">
+                  <label class="field-label" for="eQAdditionalHours">Additional hours worked</label>
+                  <input id="eQAdditionalHours" type="number" min="0" step="0.5" placeholder="0" oninput="autoCalcAdditionalCharges()">
+                </div>
+                <div class="field-wrap">
+                  <label class="field-label" for="eQAdditionalCharges">Additional charges ($) <span style="font-weight:400;color:var(--ink3);">auto-calc, editable</span></label>
+                  <input id="eQAdditionalCharges" type="number" min="0" step="0.01" placeholder="0" oninput="autoCalcInvoicedAmount()">
+                </div>
+                <div class="field-wrap">
+                  <label class="field-label" for="eQInvoicedAmount">Total invoiced amount ($) <span style="font-weight:400;color:var(--ink3);">auto-calc, editable</span></label>
+                  <input id="eQInvoicedAmount" type="number" min="0" step="0.01" placeholder="auto-calculated" oninput="if(typeof window._renderFinancialReadoutFromForm==='function') window._renderFinancialReadoutFromForm()">
+                </div>
+                <div class="field-wrap">
+                  <label class="field-label" for="eQInvoiceSentDate">Invoice sent date</label>
+                  <input id="eQInvoiceSentDate" type="date">
+                </div>
+              </div>
+            </div>
+
             <div class="field-wrap">
               <label class="field-label" for="eQCustomTerms">Custom contract notes / terms</label>
               <textarea id="eQCustomTerms" placeholder="Optional notes or special terms to include in the contract"></textarea>
@@ -1601,6 +1624,10 @@ function normalizeLoadedState(data) {
     if (e.contractBartenderCount === undefined) e.contractBartenderCount = "";
     if (e.contractBartenderRate === undefined) e.contractBartenderRate = "";
     if (e.contractMandatoryTips === undefined) e.contractMandatoryTips = null;
+    if (e.additionalHours === undefined) e.additionalHours = null;
+    if (e.additionalCharges === undefined) e.additionalCharges = null;
+    if (e.invoicedAmount === undefined) e.invoicedAmount = null;
+    if (e.invoiceSentDate === undefined) e.invoiceSentDate = "";
     if (e.contractBartenderSetupHours === undefined) e.contractBartenderSetupHours = 1;
     if (e.contractBarbackCount === undefined) e.contractBarbackCount = 0;
     if (e.contractBarbackRate === undefined) e.contractBarbackRate = "";
@@ -2469,6 +2496,27 @@ function applyContractPricingToForm() {
   if (quoteForDeposit > 0) { const depositPercent = pricing.depositPercent ?? 30; depositField.value = String(Math.round((quoteForDeposit * depositPercent / 100) * 100) / 100); }
   updateBalanceDueField(); return pricing;
 }
+function autoCalcAdditionalCharges() {
+  const addHrs = numeric(document.getElementById("eQAdditionalHours").value) || 0;
+  if (addHrs > 0) {
+    const bartCount = numeric(document.getElementById("eQBartenderCount").value) || 0;
+    const bartRate  = numeric(document.getElementById("eQBartenderRate").value) || 0;
+    const bbCount   = numeric(document.getElementById("eQBarbackCount").value) || 0;
+    const bbRate    = numeric(document.getElementById("eQBarbackRate").value) || 0;
+    const calc = (bartCount * bartRate + bbCount * bbRate) * addHrs;
+    if (calc > 0) document.getElementById("eQAdditionalCharges").value = calc.toFixed(2);
+  }
+  autoCalcInvoicedAmount();
+}
+function autoCalcInvoicedAmount() {
+  const quote      = numeric(document.getElementById("eQuote").value) || 0;
+  const addCharges = numeric(document.getElementById("eQAdditionalCharges").value) || 0;
+  const tips       = numeric(document.getElementById("eQMandatoryTips").value) || 0;
+  const reimb      = numeric(document.getElementById("eReimbursableExpenses").value) || 0;
+  const total = quote + addCharges + tips + reimb;
+  if (total > 0) document.getElementById("eQInvoicedAmount").value = total.toFixed(2);
+  if (typeof window._renderFinancialReadoutFromForm === 'function') window._renderFinancialReadoutFromForm();
+}
 function recalcQuoteFromRates() {
   const duration = calcDurationHours(document.getElementById("eStartTime").value, document.getElementById("eEndTime").value) || 0;
   const bartenderCount = numeric(document.getElementById("eQBartenderCount").value) || 0;
@@ -2507,6 +2555,7 @@ function recalcQuoteFromRates() {
     lines.push(`Total = $${total.toFixed(2)}`);
     document.getElementById("eQuote").value = total.toFixed(2);
     updateBalanceDueField();
+    autoCalcInvoicedAmount();
     if (depositPercent > 0) {
       const dep = Math.round(total * depositPercent / 100 * 100) / 100;
       const depField = document.getElementById("eDepositRequired");
@@ -2584,6 +2633,7 @@ document.getElementById("eEndTime").addEventListener("input", () => { updateDura
 document.getElementById("eStartTime").addEventListener("input", () => { updateDurationField(); refreshStaffPayoutPreviews(); });
 document.getElementById("eDate").addEventListener("change", () => { document.querySelectorAll(".bartender-select-row").forEach(row => checkStaffAvailabilityWarning(row)); });
 ["eQuote","eDepositPaid","eFinalPaid","eReimbursableExpenses"].forEach(id => document.getElementById(id).addEventListener("input", updateBalanceDueField));
+["eQuote","eReimbursableExpenses","eQMandatoryTips"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", autoCalcInvoicedAmount); });
 ["eStaffOvertimeHours"].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener("input", refreshStaffPayoutPreviews); });
 ["eStartTime","eEndTime","eQTravelFee","eQDepositPercent","eQBartenderCount","eQBartenderRate","eQBartenderSetupHours","eQBarbackCount","eQBarbackRate","eQBarbackSetupHours","eQMandatoryTips"].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener("input", applyContractPricingToForm); });
 document.getElementById("eCustomer").addEventListener("change", () => {
@@ -2725,7 +2775,7 @@ function buildEventPayloadFromForm() {
   const balance = Math.max(0, quote + reimb - totalPaid);
   const bartenderAssignments = getCurrentAssignments();
   const customerId = resolveEventCustomerId();
-  return { id: editingEventId || nextEventId(), eventName: document.getElementById("eName").value.trim(), customerId, status: document.getElementById("eStatus").value, eventType: document.getElementById("eEventType").value.trim(), date: document.getElementById("eDate").value, startTime: document.getElementById("eStartTime").value, endTime: document.getElementById("eEndTime").value, guestCount: numeric(document.getElementById("eGuests").value), venueName: document.getElementById("eVenueName").value.trim(), venueAddress: document.getElementById("eVenueAddress").value.trim(), barSetup: document.getElementById("eBarSetup").value, existingBar: document.getElementById("eBarSetup").value === "existing", bookingSite: document.getElementById("eBookingSite").value.trim(), quotationAmount: quote, depositRequired: numeric(document.getElementById("eDepositRequired").value), depositAmountPaid: depositPaid, depositDatePaid: document.getElementById("eDepositDate").value, depositPaidBy: document.getElementById("eDepositPaidBy").value.trim(), finalAmountPaid: finalPaid, finalAmountPaidDate: document.getElementById("eFinalPaidDate").value, finalAmountPaymentMethod: document.getElementById("eFinalMethod").value.trim(), contractSentDate: document.getElementById("eContractSentDate").value, staffOvertimeHours: numeric(document.getElementById("eStaffOvertimeHours").value) || 0, billClientExtraTime: false, extraTimeRate: 0, extraTimeBilled: 0, overtimeNotes: document.getElementById("eOvertimeNotes").value.trim(), quotedBartenderCount: numeric(document.getElementById("eQBartenderCount").value) || null, quotedBartenderRate: numeric(document.getElementById("eQBartenderRate").value) ?? null, quotedBartenderSetupHours: numeric(document.getElementById("eQBartenderSetupHours").value) ?? null, quotedBarbackCount: numeric(document.getElementById("eQBarbackCount").value) || 0, quotedBarbackRate: numeric(document.getElementById("eQBarbackRate").value) ?? null, quotedBarbackSetupHours: numeric(document.getElementById("eQBarbackSetupHours").value) ?? null, quotedDepositPercent: numeric(document.getElementById("eQDepositPercent").value) ?? null, quotedTravelFee: numeric(document.getElementById("eQTravelFee").value) || 0, quotedMandatoryTips: numeric(document.getElementById("eQMandatoryTips").value) ?? null, quotedCustomTerms: document.getElementById("eQCustomTerms").value.trim(), contractGeneratedDate: document.getElementById("eContractGeneratedDate").value, contractSignedDate: document.getElementById("eContractSignedDate").value, contractFileName: document.getElementById("eContractFileName").value.trim(), location: document.getElementById("eLocation").value.trim(), description: document.getElementById("eDescription").value.trim(), latestUpdate: document.getElementById("eUpdate").value.trim(), followUpDate: document.getElementById("eFollowUpDate").value, followUpType: document.getElementById("eFollowUpType").value, followUpStatus: document.getElementById("eFollowUpStatus").value || "open", followUpCompletedDate: document.getElementById("eFollowUpCompletedDate").value, followUpNotes: document.getElementById("eFollowUpNotes").value.trim(), totalAmountPaid: totalPaid, balanceDue: balance, eventCosts: numeric(document.getElementById("eCosts").value) || 0, advertisingCost: numeric(document.getElementById("eAdCost").value) || 0, reimbursableExpenses: reimb, dateOfContact: document.getElementById("eDateOfContact").value || "", bartenderAssignments };
+  return { id: editingEventId || nextEventId(), eventName: document.getElementById("eName").value.trim(), customerId, status: document.getElementById("eStatus").value, eventType: document.getElementById("eEventType").value.trim(), date: document.getElementById("eDate").value, startTime: document.getElementById("eStartTime").value, endTime: document.getElementById("eEndTime").value, guestCount: numeric(document.getElementById("eGuests").value), venueName: document.getElementById("eVenueName").value.trim(), venueAddress: document.getElementById("eVenueAddress").value.trim(), barSetup: document.getElementById("eBarSetup").value, existingBar: document.getElementById("eBarSetup").value === "existing", bookingSite: document.getElementById("eBookingSite").value.trim(), quotationAmount: quote, depositRequired: numeric(document.getElementById("eDepositRequired").value), depositAmountPaid: depositPaid, depositDatePaid: document.getElementById("eDepositDate").value, depositPaidBy: document.getElementById("eDepositPaidBy").value.trim(), finalAmountPaid: finalPaid, finalAmountPaidDate: document.getElementById("eFinalPaidDate").value, finalAmountPaymentMethod: document.getElementById("eFinalMethod").value.trim(), contractSentDate: document.getElementById("eContractSentDate").value, staffOvertimeHours: numeric(document.getElementById("eStaffOvertimeHours").value) || 0, billClientExtraTime: false, extraTimeRate: 0, extraTimeBilled: 0, overtimeNotes: document.getElementById("eOvertimeNotes").value.trim(), quotedBartenderCount: numeric(document.getElementById("eQBartenderCount").value) || null, quotedBartenderRate: numeric(document.getElementById("eQBartenderRate").value) ?? null, quotedBartenderSetupHours: numeric(document.getElementById("eQBartenderSetupHours").value) ?? null, quotedBarbackCount: numeric(document.getElementById("eQBarbackCount").value) || 0, quotedBarbackRate: numeric(document.getElementById("eQBarbackRate").value) ?? null, quotedBarbackSetupHours: numeric(document.getElementById("eQBarbackSetupHours").value) ?? null, quotedDepositPercent: numeric(document.getElementById("eQDepositPercent").value) ?? null, quotedTravelFee: numeric(document.getElementById("eQTravelFee").value) || 0, quotedMandatoryTips: numeric(document.getElementById("eQMandatoryTips").value) ?? null, additionalHours: numeric(document.getElementById("eQAdditionalHours").value) ?? null, additionalCharges: numeric(document.getElementById("eQAdditionalCharges").value) ?? null, invoicedAmount: numeric(document.getElementById("eQInvoicedAmount").value) ?? null, invoiceSentDate: document.getElementById("eQInvoiceSentDate").value, quotedCustomTerms: document.getElementById("eQCustomTerms").value.trim(), contractGeneratedDate: document.getElementById("eContractGeneratedDate").value, contractSignedDate: document.getElementById("eContractSignedDate").value, contractFileName: document.getElementById("eContractFileName").value.trim(), location: document.getElementById("eLocation").value.trim(), description: document.getElementById("eDescription").value.trim(), latestUpdate: document.getElementById("eUpdate").value.trim(), followUpDate: document.getElementById("eFollowUpDate").value, followUpType: document.getElementById("eFollowUpType").value, followUpStatus: document.getElementById("eFollowUpStatus").value || "open", followUpCompletedDate: document.getElementById("eFollowUpCompletedDate").value, followUpNotes: document.getElementById("eFollowUpNotes").value.trim(), totalAmountPaid: totalPaid, balanceDue: balance, eventCosts: numeric(document.getElementById("eCosts").value) || 0, advertisingCost: numeric(document.getElementById("eAdCost").value) || 0, reimbursableExpenses: reimb, dateOfContact: document.getElementById("eDateOfContact").value || "", bartenderAssignments };
 }
 function saveEventPayloadFromForm(options = {}) {
   const payload = buildEventPayloadFromForm();
@@ -2848,6 +2898,10 @@ window.editEvent = function(id) {
   document.getElementById("eQDepositPercent").value=e.quotedDepositPercent??e.contractDepositPercent??"";
   document.getElementById("eQTravelFee").value=e.quotedTravelFee??e.travelFee??"";
   document.getElementById("eQMandatoryTips").value=e.quotedMandatoryTips??e.contractMandatoryTips??"";
+  document.getElementById("eQAdditionalHours").value=e.additionalHours??""
+  document.getElementById("eQAdditionalCharges").value=e.additionalCharges??""
+  document.getElementById("eQInvoicedAmount").value=e.invoicedAmount??""
+  document.getElementById("eQInvoiceSentDate").value=e.invoiceSentDate||""
   document.getElementById("eQCustomTerms").value=e.quotedCustomTerms||e.customContractTerms||"";
   /* Contract tab tracking dates — still saved */
   document.getElementById("eContractGeneratedDate").value=e.contractGeneratedDate||""; document.getElementById("eContractSignedDate").value=e.contractSignedDate||"";
@@ -5874,31 +5928,37 @@ renderAll();ensureEditableContractFields();
         return;
       }
 
-      var revenue   = parseFloat(ev.quotationAmount)||0;
-      var reimb     = parseFloat(ev.reimbursableExpenses)||0;
-      var deposit   = parseFloat(ev.depositAmountPaid)||0;
-      var finalPaid = parseFloat(ev.finalAmountPaid)||0;
-      var collected = deposit+finalPaid;
-      var balance   = Math.max(0, revenue+reimb-collected);
+      var revenue          = parseFloat(ev.quotationAmount)||0;
+      var additionalCharges= parseFloat(ev.additionalCharges)||0;
+      var invoicedAmount   = parseFloat(ev.invoicedAmount)||0;
+      var reimb            = parseFloat(ev.reimbursableExpenses)||0;
+      var mandatoryTipsAmt = parseFloat(ev.contractMandatoryTips)||parseFloat(ev.quotedMandatoryTips)||0;
+      var deposit          = parseFloat(ev.depositAmountPaid)||0;
+      var finalPaid        = parseFloat(ev.finalAmountPaid)||0;
+      var collected        = deposit+finalPaid;
 
-      var laborCost   = (typeof bartenderLaborCost==='function') ? bartenderLaborCost(ev) : 0;
-      var baseLaborOnly = (typeof bartenderBaseLaborOnly==='function') ? bartenderBaseLaborOnly(ev) : 0;
-      var travelPayOnly = (typeof bartenderTravelPayTotal==='function') ? bartenderTravelPayTotal(ev) : 0;
-      var laborPaid2  = (typeof bartenderPaidAmount==='function') ? bartenderPaidAmount(ev) : 0;
-      var laborUnpaid = laborCost - laborPaid2;
-      var tipTotal    = (typeof eventTipTotal==='function') ? eventTipTotal(ev) : 0;
-      var eventCosts  = parseFloat(ev.eventCosts)||0;
-      var adCost      = parseFloat(ev.advertisingCost)||0;
+      /* Effective total the client owes (invoicedAmount if set, else auto-compute) */
+      var effectiveInvoiced = invoicedAmount || (revenue + additionalCharges + mandatoryTipsAmt + reimb);
+      var balance = Math.max(0, effectiveInvoiced - collected);
 
+      var laborCost    = (typeof bartenderLaborCost==='function') ? bartenderLaborCost(ev) : 0;
+      var baseLaborOnly= (typeof bartenderBaseLaborOnly==='function') ? bartenderBaseLaborOnly(ev) : 0;
+      var travelPayOnly= (typeof bartenderTravelPayTotal==='function') ? bartenderTravelPayTotal(ev) : 0;
+      var laborPaid2   = (typeof bartenderPaidAmount==='function') ? bartenderPaidAmount(ev) : 0;
+      var laborUnpaid  = laborCost - laborPaid2;
+      var tipTotal     = (typeof eventTipTotal==='function') ? eventTipTotal(ev) : 0;
+      var eventCosts   = parseFloat(ev.eventCosts)||0;
+      var adCost       = parseFloat(ev.advertisingCost)||0;
+
+      /* Revenue the company earns = base quote + additional charges (pass-throughs excluded) */
+      var revenueForProfit = revenue + additionalCharges;
       /* Tips are pass-through from customer to staff — exclude from profit */
       var laborForProfit = laborCost - tipTotal;  /* = baseLaborOnly + travelPayOnly */
       var costsForProfit = laborForProfit + eventCosts + adCost;
-      var totalCosts  = costsForProfit; /* display Total Costs excluding pass-through tips */
-      /* Gross Profit = Quote − direct delivery costs (labor ex-tips + COGS/event costs)
-         Net Profit   = Gross Profit − advertising/marketing spend              */
-      var grossProfit = revenue - laborForProfit - eventCosts;
+      var totalCosts  = costsForProfit;
+      var grossProfit = revenueForProfit - laborForProfit - eventCosts;
       var netProfit   = grossProfit - adCost;
-      var marginPct   = revenue>0 ? (netProfit/revenue)*100 : 0;
+      var marginPct   = revenueForProfit>0 ? (netProfit/revenueForProfit)*100 : 0;
       var roiPct      = costsForProfit>0 ? (netProfit/costsForProfit)*100 : 0;
 
       var marginColor = marginPct>=40 ? '#16a34a' : marginPct>=20 ? '#d97706' : '#dc2626';
@@ -5920,11 +5980,13 @@ renderAll();ensureEditableContractFields();
       el.innerHTML=
         '<div style="'+CARD+'">'+head('Revenue')+
           '<div style="'+G3+'">'+
-            card('Total Quote',money2(revenue))+
+            card(invoicedAmount>0?'Total Invoiced':'Total Quote',money2(invoicedAmount||revenue))+
             card('Amount Collected',money2(collected),balance>0?V:VG)+
             card('Balance Due',money2(balance),balance>0?VR:V)+
           '</div>'+
+          (additionalCharges>0?'<hr style="'+HR+'"><div style="'+G3+'">'+card('Base Quote',money2(revenue),'font-size:15px;font-weight:600;color:var(--ink2);')+card('Additional Charges',money2(additionalCharges),'font-size:15px;font-weight:600;color:#d97706;')+'<div class="small" style="color:var(--ink3);padding-top:18px;">Additional time billed to client</div></div>':'')+
           (reimb>0?'<hr style="'+HR+'"><div style="'+G2+'">'+card('Reimbursable Expenses',money2(reimb),'font-size:15px;font-weight:600;color:var(--ink2);')+'<div class="small" style="color:var(--ink3);padding-top:18px;">Added to balance due · not counted as revenue or profit</div></div>':'')+
+          (ev.invoiceSentDate?'<hr style="'+HR+'"><div class="small" style="color:var(--ink3);">📄 Invoice sent: '+fmtDate(ev.invoiceSentDate)+'</div>':'')+
           (deposit||finalPaid?'<hr style="'+HR+'"><div style="'+G2+'">'+card('Deposit',money2(deposit))+card('Final Payment',money2(finalPaid))+'</div>':'')+
         '</div>'+
         '<div style="'+CARD+'">'+head('Costs')+
@@ -6003,14 +6065,19 @@ renderAll();ensureEditableContractFields();
 
       /* Read live form values */
       var g=function(id){ var e=document.getElementById(id); return e?e.value:''; };
-      var revenue    = parseFloat(g('eQuote'))||0;
-      var reimb      = parseFloat(g('eReimbursableExpenses'))||0;
-      var deposit    = parseFloat(g('eDepositPaid'))||0;
-      var finalPaid  = parseFloat(g('eFinalPaid'))||0;
-      var collected  = deposit+finalPaid;
-      var balance    = Math.max(0, revenue+reimb-collected);
-      var eventCosts = parseFloat(g('eCosts'))||0;
-      var adCost     = parseFloat(g('eAdCost'))||0;
+      var revenue          = parseFloat(g('eQuote'))||0;
+      var additionalCharges= parseFloat(g('eQAdditionalCharges'))||0;
+      var invoicedAmount   = parseFloat(g('eQInvoicedAmount'))||0;
+      var reimb            = parseFloat(g('eReimbursableExpenses'))||0;
+      var mandatoryTipsAmt = parseFloat(g('eQMandatoryTips'))||0;
+      var deposit          = parseFloat(g('eDepositPaid'))||0;
+      var finalPaid        = parseFloat(g('eFinalPaid'))||0;
+      var collected        = deposit+finalPaid;
+      var effectiveInvoiced= invoicedAmount || (revenue + additionalCharges + mandatoryTipsAmt + reimb);
+      var balance          = Math.max(0, effectiveInvoiced-collected);
+      var eventCosts       = parseFloat(g('eCosts'))||0;
+      var adCost           = parseFloat(g('eAdCost'))||0;
+      var invoiceSentDate  = g('eQInvoiceSentDate');
 
       /* Build a temporary event from current form values for staff cost calc */
       var tempAssignments=(typeof getCurrentAssignments==='function')?getCurrentAssignments():[];
@@ -6025,12 +6092,13 @@ renderAll();ensureEditableContractFields();
       var laborPaid2    = tempAssignments.filter(function(a){return a.paid;}).reduce(function(s,a){return s+bartenderAssignmentCost(a,tempEv);},0);
       var laborUnpaid   = laborCost-laborPaid2;
       var tipTotal        = (typeof eventTipTotal==='function') ? eventTipTotal(tempEv) : 0;
-      var laborForProfit  = laborCost - tipTotal;  /* = baseLaborOnly + travelPayOnly */
+      var revenueForProfit= revenue + additionalCharges;
+      var laborForProfit  = laborCost - tipTotal;
       var costsForProfit  = laborForProfit+eventCosts+adCost;
-      var totalCosts      = costsForProfit; /* display Total Costs excluding pass-through tips */
-      var grossProfit     = revenue-laborForProfit-eventCosts;
+      var totalCosts      = costsForProfit;
+      var grossProfit     = revenueForProfit-laborForProfit-eventCosts;
       var netProfit       = grossProfit-adCost;
-      var marginPct       = revenue>0?(netProfit/revenue)*100:0;
+      var marginPct       = revenueForProfit>0?(netProfit/revenueForProfit)*100:0;
       var roiPct          = costsForProfit>0?(netProfit/costsForProfit)*100:0;
 
       var marginColor= marginPct>=40?'#16a34a':marginPct>=20?'#d97706':'#dc2626';
@@ -6052,11 +6120,13 @@ renderAll();ensureEditableContractFields();
         '<div style="font-size:11px;color:var(--ink3);margin-bottom:10px;padding:6px 10px;background:rgba(99,102,241,.08);border-radius:6px;">⟳ Showing live form values — not yet saved</div>'+
         '<div style="'+CARD+'">'+head('Revenue')+
           '<div style="'+G3+'">'+
-            card('Total Quote',money2(revenue))+
+            card(invoicedAmount>0?'Total Invoiced':'Total Quote',money2(invoicedAmount||revenue))+
             card('Amount Collected',money2(collected),balance>0?V:VG)+
             card('Balance Due',money2(balance),balance>0?VR:V)+
           '</div>'+
+          (additionalCharges>0?'<hr style="'+HR+'"><div style="'+G3+'">'+card('Base Quote',money2(revenue),'font-size:15px;font-weight:600;color:var(--ink2);')+card('Additional Charges',money2(additionalCharges),'font-size:15px;font-weight:600;color:#d97706;')+'<div class="small" style="color:var(--ink3);padding-top:18px;">Additional time billed to client</div></div>':'')+
           (reimb>0?'<hr style="'+HR+'"><div style="'+G2+'">'+card('Reimbursable Expenses',money2(reimb),'font-size:15px;font-weight:600;color:var(--ink2);')+'<div class="small" style="color:var(--ink3);padding-top:18px;">Added to balance due · not counted as revenue or profit</div></div>':'')+
+          (invoiceSentDate?'<hr style="'+HR+'"><div class="small" style="color:var(--ink3);">📄 Invoice sent: '+invoiceSentDate+'</div>':'')+
           (deposit||finalPaid?'<hr style="'+HR+'"><div style="'+G2+'">'+card('Deposit',money2(deposit))+card('Final Payment',money2(finalPaid))+'</div>':'')+
         '</div>'+
         '<div style="'+CARD+'">'+head('Costs')+
