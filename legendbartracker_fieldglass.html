@@ -6759,7 +6759,7 @@ renderAll();ensureEditableContractFields();
           var staffCheckboxes=staffWithZip.length
             ? staffWithZip.map(function(b){
                 return '<label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:13px;">'
-                  +'<input type="checkbox" class="epc-staff-check" data-name="'+escAttr(b.name||'')+'" data-zip="'+escAttr(b.homeZip)+'" style="width:15px;height:15px;accent-color:var(--accent);flex-shrink:0;">'
+                  +'<input type="checkbox" class="epc-staff-check" data-name="'+safe(b.name||'')+'" data-zip="'+safe(b.homeZip)+'" style="width:15px;height:15px;accent-color:var(--accent);flex-shrink:0;">'
                   +'<span><strong>'+safe(b.name||'')+'</strong> <span style="color:var(--ink3);">('+safe(b.homeZip)+')</span></span>'
                   +'</label>';
               }).join('')
