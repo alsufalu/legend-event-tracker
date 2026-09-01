@@ -2044,10 +2044,125 @@ function checkStaffAvailabilityWarning(wrap) {
     warn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:12px;font-weight:600;color:#92400e;margin-top:6px;">⚠️ ${safe(b.name)} has ${eventDate} marked as unavailable. Confirm before assigning.</span>`;
   } else if (warn) { warn.remove(); }
 }
+function printStaffEventPayoutPdf(wrap) {
+  /* ── Read row fields ── */
+  const bartenderId = wrap.querySelector(".bartender-assignment-select")?.value || "";
+  const b = bartenderMap()[bartenderId] || {};
+  const staffName  = b.name || "Staff Member";
+  const role       = wrap.querySelector(".bartender-role")?.value || "Bartender";
+  const payType    = wrap.querySelector(".bartender-paytype")?.value || "hourly";
+  const rate       = parseFloat(wrap.querySelector(".bartender-rate")?.value) || 0;
+  const actualHrs  = parseFloat(wrap.querySelector(".bartender-actual-hours")?.value) || 0;
+  const schedHrs   = parseFloat(wrap.querySelector(".bartender-scheduled-hours")?.value) || 0;
+  const travelPay  = parseFloat(wrap.querySelector(".bartender-travel-pay")?.value) || 0;
+  const expenses   = parseFloat(wrap.querySelector(".bartender-expense-reimbursement")?.value) || 0;
+  const expNotes   = wrap.querySelector(".bartender-expense-notes")?.value || "";
+  const tips       = parseFloat(wrap.querySelector(".bartender-tips")?.value) || 0;
+  const paid       = wrap.querySelector(".bartender-paid")?.checked || false;
+  const paidDate   = wrap.querySelector(".bartender-paid-date")?.value || "";
+  const payMethod  = wrap.querySelector(".bartender-payment-method")?.value || "";
+
+  /* ── Resolve hours ── */
+  let hours = actualHrs || schedHrs;
+  if (!hours && payType !== "flat") {
+    const st = document.getElementById("eStartTime")?.value || "";
+    const et = document.getElementById("eEndTime")?.value || "";
+    if (st && et && typeof calcDurationHours === "function") hours = Math.max(0, calcDurationHours(st, et)) + 1;
+  }
+
+  /* ── Labor pay ── */
+  const laborPay = payType === "flat" ? rate : rate * (hours || 0);
+  const totalPayout = laborPay + tips + travelPay + expenses;
+
+  /* ── Event fields from form ── */
+  const eventName   = document.getElementById("eName")?.value?.trim() || "—";
+  const eventDate   = document.getElementById("eDate")?.value || "";
+  const startTime   = document.getElementById("eStartTime")?.value || "";
+  const endTime     = document.getElementById("eEndTime")?.value || "";
+  const venueName   = document.getElementById("eVenueName")?.value?.trim() || "";
+  const venueAddr   = document.getElementById("eVenueAddress")?.value?.trim() || "";
+
+  const today = new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
+  function mf(n){ return "$"+Number(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,","); }
+  function df(d){ if(!d) return "—"; const p=d.split("-"); return p.length===3?(parseInt(p[1])+"/"+parseInt(p[2])+"/"+p[0]):d; }
+  function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  const laborDetail = payType==="flat"
+    ? "Flat rate"
+    : `${mf(rate)}/hr &times; ${Number(hours||0).toFixed(2).replace(/\.00$/,"")} hrs`;
+
+  const lineRow=(lbl,detail,amt,cls)=>
+    `<tr class="${cls||""}"><td>${lbl}</td><td class="det">${detail}</td><td class="amt">${amt}</td></tr>`;
+
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Payout — ${esc(staffName)} — ${esc(eventName)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,Helvetica Neue,Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:40px;max-width:640px;margin:0 auto;}
+.hdr{border-bottom:3px solid #1a1a1a;padding-bottom:14px;margin-bottom:24px;}
+.date{font-size:11px;color:#666;margin-bottom:4px;}
+h1{font-size:21px;font-weight:700;}
+.sub{font-size:13px;color:#444;margin-top:3px;}
+.section{margin-bottom:20px;}
+.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#888;margin-bottom:8px;}
+.event-box{border:1px solid #ddd;border-radius:8px;padding:14px 16px;background:#f9fafb;}
+.event-name{font-size:16px;font-weight:700;margin-bottom:4px;}
+.event-meta{font-size:12px;color:#555;margin-bottom:2px;}
+table{width:100%;border-collapse:collapse;margin-top:4px;}
+td{padding:7px 0;font-size:13px;vertical-align:top;}
+td.det{color:#555;padding:7px 12px;flex:1;}
+td.amt{text-align:right;white-space:nowrap;min-width:80px;}
+tr+tr td{border-top:1px solid #f0f0f0;}
+tr.total td{border-top:2px solid #1a1a1a;padding-top:10px;font-weight:700;font-size:15px;}
+tr.tips td:first-child{color:#059669;}
+.status-box{border-radius:8px;padding:12px 16px;margin-top:20px;text-align:center;font-weight:700;font-size:14px;}
+.status-paid{background:#dcfce7;color:#15803d;}
+.status-unpaid{background:#fef3c7;color:#92400e;}
+@media print{body{padding:20px;}}
+</style></head><body>
+<div class="hdr">
+  <div class="date">Date: ${esc(today)}</div>
+  <h1>Staff Payment Summary</h1>
+  <div class="sub">${esc(staffName)} &nbsp;&middot;&nbsp; ${esc(role)}</div>
+</div>
+<div class="section">
+  <div class="section-title">Event</div>
+  <div class="event-box">
+    <div class="event-name">${esc(eventName)}</div>
+    <div class="event-meta">${df(eventDate)}${startTime?" &nbsp;&middot;&nbsp; "+esc(startTime):""}${endTime?" &ndash; "+esc(endTime):""}${venueName?" &nbsp;&middot;&nbsp; "+esc(venueName):""}</div>
+    ${venueAddr?`<div class="event-meta">${esc(venueAddr)}</div>`:""}
+  </div>
+</div>
+<div class="section">
+  <div class="section-title">Payout Breakdown</div>
+  <table>
+    ${lineRow("Base pay", laborDetail, mf(laborPay), "")}
+    ${tips>0 ? lineRow("Tips", "", mf(tips), "tips") : ""}
+    ${travelPay>0 ? lineRow("Travel pay", "", mf(travelPay), "") : ""}
+    ${expenses>0 ? lineRow("Expenses"+(expNotes?" ("+esc(expNotes)+")":""), "", mf(expenses), "") : ""}
+    ${lineRow("<strong>Total payout</strong>", "", "<strong>"+mf(totalPayout)+"</strong>", "total")}
+  </table>
+</div>
+<div class="status-box ${paid?"status-paid":"status-unpaid"}">
+  ${paid
+    ? "✓ Paid out"+( paidDate ? " — "+df(paidDate) : "" )+( payMethod ? " via "+esc(payMethod) : "" )
+    : "⏳ Not yet paid out"
+  }
+</div>
+</body></html>`;
+
+  const win=window.open("","_blank");
+  if(!win){ alert("Please allow pop-ups to generate the PDF."); return; }
+  win.document.write(html);
+  win.document.close();
+  setTimeout(()=>win.print(),400);
+}
+
 function addBartenderDropdown(assignment = null) {
   const wrap = document.createElement("div");
   wrap.className = "bartender-select-row staff-hours-row";
-  wrap.innerHTML = bartenderOptionHtml(assignment || {}) + `<div class="staff-hours-actions"><button type="button" class="clockOutStaffBtn">Clock out now</button><button type="button" class="danger removeBartenderSelectBtn">Remove</button></div>`;
+  wrap.innerHTML = bartenderOptionHtml(assignment || {}) + `<div class="staff-hours-actions"><button type="button" class="clockOutStaffBtn">Clock out now</button><button type="button" class="payoutPdfBtn" style="background:var(--accent);color:#fff;border:none;font-weight:600;cursor:pointer;padding:6px 12px;border-radius:6px;font-size:13px;font-family:inherit;">📄 Payout PDF</button><button type="button" class="danger removeBartenderSelectBtn">Remove</button></div>`;
+  wrap.querySelector(".payoutPdfBtn").addEventListener("click", () => printStaffEventPayoutPdf(wrap));
   wrap.querySelector(".removeBartenderSelectBtn").addEventListener("click", () => {
     wrap.remove();
     if (!document.querySelectorAll(".bartender-assignment-select").length) addBartenderDropdown();
