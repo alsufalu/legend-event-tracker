@@ -820,7 +820,7 @@ tr:hover td { background:var(--surface2); }
           <div class="field-wrap"><label class="field-label" for="bName">Bartender name</label><input id="bName" placeholder="Bartender name"></div>
           <div class="field-wrap"><label class="field-label" for="bPhone">Phone</label><input id="bPhone" placeholder="Phone"></div>
           <div class="field-wrap"><label class="field-label" for="bPayType">Default pay type</label><select id="bPayType"><option value="hourly">Hourly</option><option value="flat">Flat</option></select></div>
-          <div></div>
+          <div class="field-wrap"><label class="field-label" for="bHomeZip">Home zip code <span style="font-weight:400;color:var(--ink3);">for travel calc</span></label><input id="bHomeZip" maxlength="5" placeholder="e.g. 60564"></div>
         </div>
         <div class="field-wrap"><label class="field-label" for="bNotes">Notes</label><textarea id="bNotes" placeholder="Notes"></textarea></div>
         <div class="field-wrap" id="bDaysOffSection" style="display:none;margin-top:10px;padding:14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);">
@@ -1611,7 +1611,7 @@ function normalizeLoadedState(data) {
   if (!normalized.bartenders) normalized.bartenders = [];
   if (!normalized.overheadCosts) normalized.overheadCosts = [];
   if (!normalized.blackoutDates) normalized.blackoutDates = [];
-  normalized.bartenders = normalized.bartenders.map(b => ({ unavailableDates: [], ...b }));
+  normalized.bartenders = normalized.bartenders.map(b => ({ unavailableDates: [], homeZip: "", ...b }));
   (normalized.events || []).forEach(e => {
     if (!e) return;
     if (e.eventType === undefined) e.eventType = "";
@@ -2586,7 +2586,7 @@ window.removeDayOff = function(d) {
   _editingBartenderDaysOff = _editingBartenderDaysOff.filter(x => x!==d);
   renderDaysOffChips();
 };
-function clearBartenderForm() { editingBartenderId = null; _editingBartenderDaysOff = []; document.getElementById("bName").value = ""; document.getElementById("bPhone").value = ""; document.getElementById("bPayType").value = "hourly"; document.getElementById("bNotes").value = ""; document.getElementById("bDaysOffSection").style.display = "none"; document.getElementById("bDaysOffChips").innerHTML = ""; }
+function clearBartenderForm() { editingBartenderId = null; _editingBartenderDaysOff = []; document.getElementById("bName").value = ""; document.getElementById("bPhone").value = ""; document.getElementById("bPayType").value = "hourly"; document.getElementById("bNotes").value = ""; document.getElementById("bHomeZip").value = ""; document.getElementById("bDaysOffSection").style.display = "none"; document.getElementById("bDaysOffChips").innerHTML = ""; }
 function clearCostForm() { editingCostId = null; document.getElementById("gCostName").value = ""; document.getElementById("gCostCategory").value = ""; document.getElementById("gCostAmount").value = ""; document.getElementById("gCostDate").value = ""; document.getElementById("gCostNotes").value = ""; }
 function refreshStaffPayoutPreviews() {
   const startTime = document.getElementById("eStartTime")?.value || "";
@@ -2758,7 +2758,7 @@ document.getElementById("saveCustomerBtn").addEventListener("click", () => {
   saveState(); clearCustomerForm(); renderAll(); switchTab("customers");
 });
 document.getElementById("saveBartenderBtn").addEventListener("click", () => {
-  const payload = { id: editingBartenderId || nextId("B", state.bartenders || []), name: document.getElementById("bName").value.trim(), phone: formatPhone(document.getElementById("bPhone").value.trim()), payType: document.getElementById("bPayType").value, notes: document.getElementById("bNotes").value.trim(), unavailableDates: [..._editingBartenderDaysOff] };
+  const payload = { id: editingBartenderId || nextId("B", state.bartenders || []), name: document.getElementById("bName").value.trim(), phone: formatPhone(document.getElementById("bPhone").value.trim()), payType: document.getElementById("bPayType").value, notes: document.getElementById("bNotes").value.trim(), homeZip: (document.getElementById("bHomeZip").value||"").trim(), unavailableDates: [..._editingBartenderDaysOff] };
   if (!payload.name) return alert("Please enter a bartender name.");
   if (editingBartenderId) state.bartenders = state.bartenders.map(b => b.id === editingBartenderId ? payload : b); else state.bartenders.push(payload);
   saveState(); clearBartenderForm(); renderAll(); switchTab("bartenders");
@@ -2873,7 +2873,7 @@ window.editCost = function(id) { const c=(state.overheadCosts||[]).find(x=>x.id=
 window.deleteCost = function(id) { if(!confirm("Delete this cost?")) return; state.overheadCosts=state.overheadCosts.filter(c=>c.id!==id); renderAll(); };
 window.editCustomer = function(id) { const c=(state.customers||[]).find(x=>x.id===id); if(!c) return; editingCustomerId=id; document.getElementById("cName").value=c.name||""; document.getElementById("cPhone").value=formatPhone(c.phone||""); document.getElementById("cNotes").value=c.notes||""; switchTab("customers"); window.scrollTo({top:0,behavior:"smooth"}); };
 window.deleteCustomer = function(id) { if((state.events||[]).some(e=>e.customerId===id)) return alert("This customer is linked to events. Reassign or delete those events first."); if(!confirm("Delete this customer?")) return; state.customers=state.customers.filter(c=>c.id!==id); renderAll(); };
-window.editBartender = function(id) { const b=(state.bartenders||[]).find(x=>x.id===id); if(!b) return; editingBartenderId=id; _editingBartenderDaysOff=[...(b.unavailableDates||[])]; document.getElementById("bName").value=b.name||""; document.getElementById("bPhone").value=formatPhone(b.phone||""); document.getElementById("bPayType").value=b.payType||"hourly"; document.getElementById("bNotes").value=b.notes||""; document.getElementById("bDaysOffSection").style.display="block"; renderDaysOffChips(); switchTab("bartenders"); window.scrollTo({top:0,behavior:"smooth"}); };
+window.editBartender = function(id) { const b=(state.bartenders||[]).find(x=>x.id===id); if(!b) return; editingBartenderId=id; _editingBartenderDaysOff=[...(b.unavailableDates||[])]; document.getElementById("bName").value=b.name||""; document.getElementById("bPhone").value=formatPhone(b.phone||""); document.getElementById("bPayType").value=b.payType||"hourly"; document.getElementById("bNotes").value=b.notes||""; document.getElementById("bHomeZip").value=b.homeZip||""; document.getElementById("bDaysOffSection").style.display="block"; renderDaysOffChips(); switchTab("bartenders"); window.scrollTo({top:0,behavior:"smooth"}); };
 window.deleteBartender = function(id) { if((state.events||[]).some(e=>(e.bartenderAssignments||[]).some(a=>a.id===id))) return alert("This bartender is assigned to one or more events."); if(!confirm("Delete this bartender?")) return; state.bartenders=state.bartenders.filter(b=>b.id!==id); renderAll(); };
 window.editEvent = function(id) {
   const e=(state.events||[]).find(x=>x.id===id); if(!e) return; editingEventId=id;
@@ -6754,9 +6754,20 @@ renderAll();ensureEditableContractFields();
         try{
           var inp='padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:14px;background:var(--surface);color:var(--fg);width:100%;box-sizing:border-box;';
           var lbl='font-size:13px;font-weight:600;display:block;margin-bottom:5px;color:var(--fg);';
+          /* Build staff checkboxes for staff with homeZip set */
+          var staffWithZip=(state.bartenders||[]).filter(function(b){return b.homeZip&&b.homeZip.length===5;});
+          var staffCheckboxes=staffWithZip.length
+            ? staffWithZip.map(function(b){
+                return '<label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:13px;">'
+                  +'<input type="checkbox" class="epc-staff-check" data-name="'+escAttr(b.name||'')+'" data-zip="'+escAttr(b.homeZip)+'" style="width:15px;height:15px;accent-color:var(--accent);flex-shrink:0;">'
+                  +'<span><strong>'+safe(b.name||'')+'</strong> <span style="color:var(--ink3);">('+safe(b.homeZip)+')</span></span>'
+                  +'</label>';
+              }).join('')
+            : '<div class="small" style="color:var(--ink3);padding:4px 0;">No staff home zip codes saved yet. Add them in the Bartenders tab, or use manual entry below.</div>';
+
           var html=
             '<div style="display:flex;gap:28px;align-items:flex-start;">'
-            +'<div style="flex:0 0 230px;min-width:0;">'
+            +'<div style="flex:0 0 240px;min-width:0;">'
             +'<div style="margin-bottom:11px;"><label style="'+lbl+'">Number of guests</label>'
             +'<input type="number" id="epcGuests" min="1" max="600" placeholder="e.g. 85" style="'+inp+'"></div>'
             +'<div style="margin-bottom:11px;"><label style="'+lbl+'">Duration (hours)</label>'
@@ -6765,8 +6776,17 @@ renderAll();ensureEditableContractFields();
             +'<input type="text" id="epcZip" maxlength="5" placeholder="e.g. 60601" style="'+inp+'"></div>'
             +'<div style="margin-bottom:11px;"><label style="'+lbl+'">Client first name</label>'
             +'<input type="text" id="epcName" placeholder="e.g. Sarah" style="'+inp+'"></div>'
-            +'<div style="margin-bottom:16px;"><label style="'+lbl+'">Event type</label>'
+            +'<div style="margin-bottom:11px;"><label style="'+lbl+'">Event type</label>'
             +'<input type="text" id="epcEventType" placeholder="e.g. wedding reception" style="'+inp+'"></div>'
+            +'<div style="margin-bottom:11px;"><label style="'+lbl+'">Travel rate ($/mile) <span style="font-weight:400;color:var(--ink3);">default: $0.55</span></label>'
+            +'<input type="number" id="epcMileRate" min="0" step="0.01" placeholder="0.55" value="0.55" style="'+inp+'"></div>'
+            +'<div style="margin-bottom:16px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;">'
+            +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);margin-bottom:8px;">Staff origin (select attending staff)</div>'
+            +staffCheckboxes
+            +'<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">'
+            +'<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;color:var(--ink2);">Or enter zip codes manually <span style="font-weight:400;color:var(--ink3);">(comma-separated)</span></label>'
+            +'<input type="text" id="epcManualZips" placeholder="e.g. 60564, 60601" style="'+inp+'">'
+            +'</div></div>'
             +'<button type="button" id="epcCalcBtn" class="primary" style="padding:10px 0;font-size:14px;font-weight:600;width:100%;">Calculate Price</button>'
             +'</div>'
             +'<div id="epcResult" style="flex:1;min-width:0;"></div>'
@@ -6781,11 +6801,23 @@ renderAll();ensureEditableContractFields();
               var zip=(document.getElementById('epcZip').value||'').trim();
               var firstName=(document.getElementById('epcName').value||'').trim();
               var eventType=(document.getElementById('epcEventType').value||'').trim();
+              var ratePerMile=parseFloat((document.getElementById('epcMileRate').value||'0.55'))||0.55;
               var resultEl=document.getElementById('epcResult');
               if(!guests||!hours||zip.length<5){
                 resultEl.innerHTML='<div style="color:#dc2626;font-size:13px;padding:8px 0;">Please fill in guests, hours, and zip code.</div>';
                 return;
               }
+              /* Collect staff origins */
+              var allOrigins=[];
+              document.querySelectorAll('.epc-staff-check:checked').forEach(function(cb){
+                allOrigins.push({name:cb.getAttribute('data-name'),zip:cb.getAttribute('data-zip')});
+              });
+              var manualStr=(document.getElementById('epcManualZips')||{}).value||'';
+              manualStr.split(',').forEach(function(z){
+                var t=z.trim(); if(t.length===5) allOrigins.push({name:'Manual ('+t+')',zip:t});
+              });
+              if(!allOrigins.length) allOrigins=[{name:'Default (60564)',zip:'60564'}];
+
               resultEl.innerHTML='<div style="font-size:13px;color:var(--ink3);padding:8px 0;">Calculating…</div>';
               function epcStaff(g){
                 if(g<=50)  return {b:1,h:0};
@@ -6808,18 +6840,29 @@ renderAll();ensureEditableContractFields();
                 var x=Math.sin(dL/2)*Math.sin(dL/2)+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dO/2)*Math.sin(dO/2);
                 return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
               }
-              var billingHours=hours+1; // +1 hr for 30min setup + 30min cleanup
+              var billingHours=hours+1;
               var staff=epcStaff(guests),rates=epcRates(billingHours);
               var base=(staff.b*rates.br*billingHours)+(staff.h*rates.hr*billingHours);
-              var BLAT=41.7163,BLON=-88.2219;
-              fetch('https://api.zippopotam.us/us/'+zip)
-                .then(function(r){if(!r.ok) throw new Error('ZIP "'+zip+'" not found.');return r.json();})
-                .then(function(data){
-                  var eLat=parseFloat(data.places[0].latitude),eLon=parseFloat(data.places[0].longitude);
-                  var driveMi=Math.round(epcHav(BLAT,BLON,eLat,eLon)*1.25);
-                  var travel=Math.round(driveMi*2*0.55*(staff.b+staff.h));
-                  var total=Math.round(base+travel);
-                  var city=(data.places[0]['place name']||zip)+', '+(data.places[0]['state abbreviation']||'');
+
+              /* Fetch event zip + all origin zips in parallel */
+              var eventFetch=fetch('https://api.zippopotam.us/us/'+zip).then(function(r){if(!r.ok)throw new Error('Event ZIP "'+zip+'" not found.');return r.json();});
+              var originFetches=allOrigins.map(function(o){
+                return fetch('https://api.zippopotam.us/us/'+o.zip).then(function(r){if(!r.ok)throw new Error('ZIP "'+o.zip+'" not found.');return r.json();});
+              });
+              Promise.all([eventFetch].concat(originFetches))
+                .then(function(results){
+                  var eventData=results[0], originResults=results.slice(1);
+                  var eLat=parseFloat(eventData.places[0].latitude),eLon=parseFloat(eventData.places[0].longitude);
+                  var city=(eventData.places[0]['place name']||zip)+', '+(eventData.places[0]['state abbreviation']||'');
+                  var travelBreakdown=originResults.map(function(od,i){
+                    var oLat=parseFloat(od.places[0].latitude),oLon=parseFloat(od.places[0].longitude);
+                    var driveMi=Math.round(epcHav(oLat,oLon,eLat,eLon)*1.25);
+                    var travelCost=Math.round(driveMi*2*ratePerMile);
+                    var oCity=(od.places[0]['place name']||'')+', '+(od.places[0]['state abbreviation']||'');
+                    return {name:allOrigins[i].name,zip:allOrigins[i].zip,oCity:oCity,driveMi:driveMi,travelCost:travelCost};
+                  });
+                  var totalTravel=travelBreakdown.reduce(function(s,t){return s+t.travelCost;},0);
+                  var total=Math.round(base+totalTravel);
                   var staffDisp=staff.b+' state licensed bartender'+(staff.b!==1?'s':'');
                   if(staff.h>0) staffDisp+=' & '+staff.h+' helper'+(staff.h!==1?'s':'');
                   var staffMsg=staff.b+' state licensed bartender'+(staff.b!==1?'s':'');
@@ -6830,17 +6873,21 @@ renderAll();ensureEditableContractFields();
                     +'The rate for your '+hours+' hour event will be $'+total+'. That includes '+staffMsg+', garnishes, cocktail napkins and straws, homemade syrups, liquor liability insurance, portable bar (if required), menu development, shopping list, shopping support, and travel.\n\n'
                     +'Please do let us know if you have any questions. Thank you, -Alberto';
                   var row=function(l,v){return '<tr><td style="padding:5px 0;color:var(--ink3);">'+l+'</td><td style="text-align:right;font-weight:600;">'+v+'</td></tr>';};
+                  var travelRows=travelBreakdown.map(function(t){
+                    return row(safe(t.name)+' ('+safe(t.oCity)+', ~'+t.driveMi+' mi × 2 @ $'+ratePerMile+'/mi)','$'+t.travelCost);
+                  }).join('');
                   resultEl.innerHTML=
                     '<div style="border:1px solid var(--border);border-radius:10px;padding:16px;background:var(--surface2);margin-bottom:14px;">'
                     +'<div style="font-size:14px;font-weight:700;margin-bottom:10px;">Price Breakdown</div>'
                     +'<table style="width:100%;font-size:13px;border-collapse:collapse;">'
                     +row('Guests',guests)
                     +row('Duration',hours+' hrs')
-                    +row('Staffing',safe(staffDisp))
+                    +row('Recommended staffing',safe(staffDisp))
                     +row('Rate','$'+rates.br+'/hr bartender'+(staff.h>0?', $'+rates.hr+'/hr helper':''))
                     +row('Base service','$'+Math.round(base))
                     +row('Venue',safe(city))
-                    +row('Travel (~'+driveMi+' mi, '+(staff.b+staff.h)+' staff)','$'+travel)
+                    +travelRows
+                    +(travelBreakdown.length>1?row('<strong>Total travel ('+travelBreakdown.length+' staff)</strong>','<strong>$'+totalTravel+'</strong>'):'')
                     +'<tr style="border-top:2px solid var(--border);"><td style="padding:10px 0 4px;font-size:15px;font-weight:700;">Total</td>'
                     +'<td style="text-align:right;font-size:15px;font-weight:700;color:#16a34a;">$'+total+'</td></tr>'
                     +'</table></div>'

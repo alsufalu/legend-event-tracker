@@ -1963,6 +1963,14 @@ function openReport(id) {
     title = '🧮 Event Price Calculator';
     const inp = 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:15px;background:var(--surface);color:var(--fg);box-sizing:border-box;';
     const lbl = 'font-size:13px;font-weight:600;display:block;margin-bottom:5px;color:var(--ink2);';
+    const staffWithZip = (state.bartenders||[]).filter(b => b.homeZip && b.homeZip.length===5);
+    const staffCheckboxHtml = staffWithZip.length
+      ? staffWithZip.map(b =>
+          `<label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+            <input type="checkbox" class="epc-staff-check" data-name="${safe(b.name||'')}" data-zip="${safe(b.homeZip)}" style="width:18px;height:18px;accent-color:var(--accent);flex-shrink:0;">
+            <span style="font-size:14px;"><strong>${safe(b.name||'')}</strong> <span style="color:var(--ink3);">(${safe(b.homeZip)})</span></span>
+          </label>`).join('')
+      : `<div style="font-size:13px;color:var(--ink3);padding:4px 0;">No staff home zips saved. Add them in Bartenders, or enter manually below.</div>`;
     html = `
       <div style="padding:20px 16px;">
         <div style="margin-bottom:14px;"><label style="${lbl}">Number of guests</label>
@@ -1977,8 +1985,19 @@ function openReport(id) {
         <div style="margin-bottom:14px;"><label style="${lbl}">Client first name</label>
           <input type="text" id="epcName" placeholder="e.g. Sarah" style="${inp}">
         </div>
-        <div style="margin-bottom:20px;"><label style="${lbl}">Event type</label>
+        <div style="margin-bottom:14px;"><label style="${lbl}">Event type</label>
           <input type="text" id="epcEventType" placeholder="e.g. wedding reception" style="${inp}">
+        </div>
+        <div style="margin-bottom:14px;"><label style="${lbl}">Travel rate ($/mile) <span style="font-weight:400;color:var(--ink3);">default: $0.55</span></label>
+          <input type="number" id="epcMileRate" min="0" step="0.01" placeholder="0.55" value="0.55" style="${inp}">
+        </div>
+        <div style="margin-bottom:20px;border:1px solid var(--border);border-radius:10px;padding:12px 14px;">
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);margin-bottom:10px;">Staff origin — select attending staff</div>
+          ${staffCheckboxHtml}
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+            <label style="${lbl}">Or enter zip codes manually <span style="font-weight:400;color:var(--ink3);">(comma-separated)</span></label>
+            <input type="text" id="epcManualZips" placeholder="e.g. 60564, 60601" style="${inp}">
+          </div>
         </div>
         <button class="btn btn-primary" style="width:100%;font-size:15px;" onclick="epcCalcMobile()">Calculate Price</button>
         <div id="epcMobileResult" style="margin-top:16px;"></div>
@@ -1989,18 +2008,29 @@ function openReport(id) {
 }
 
 function epcCalcMobile() {
-  const guests    = parseInt((document.getElementById('epcGuests')?.value||'0'), 10);
-  const hours     = parseFloat((document.getElementById('epcHours')?.value||'0'));
-  const zip       = (document.getElementById('epcZip')?.value||'').trim();
-  const firstName = (document.getElementById('epcName')?.value||'').trim();
-  const eventType = (document.getElementById('epcEventType')?.value||'').trim();
-  const resultEl  = document.getElementById('epcMobileResult');
+  const guests      = parseInt((document.getElementById('epcGuests')?.value||'0'), 10);
+  const hours       = parseFloat((document.getElementById('epcHours')?.value||'0'));
+  const zip         = (document.getElementById('epcZip')?.value||'').trim();
+  const firstName   = (document.getElementById('epcName')?.value||'').trim();
+  const eventType   = (document.getElementById('epcEventType')?.value||'').trim();
+  const ratePerMile = parseFloat((document.getElementById('epcMileRate')?.value||'0.55'))||0.55;
+  const resultEl    = document.getElementById('epcMobileResult');
   if (!resultEl) return;
 
   if (!guests || !hours || zip.length < 5) {
     resultEl.innerHTML = '<div style="color:#dc2626;font-size:14px;padding:8px 0;">Please fill in guests, hours, and zip code.</div>';
     return;
   }
+
+  /* Collect origins from staff checkboxes + manual entry */
+  const allOrigins = [];
+  document.querySelectorAll('.epc-staff-check:checked').forEach(cb => {
+    allOrigins.push({name: cb.getAttribute('data-name'), zip: cb.getAttribute('data-zip')});
+  });
+  const manualStr = (document.getElementById('epcManualZips')?.value||'');
+  manualStr.split(',').forEach(z => { const t=z.trim(); if(t.length===5) allOrigins.push({name:'Manual ('+t+')',zip:t}); });
+  if (!allOrigins.length) allOrigins = [{name:'Default (60564)',zip:'60564'}];
+
   resultEl.innerHTML = '<div style="font-size:14px;color:var(--ink3);padding:8px 0;">Calculating…</div>';
 
   function epcStaff(g) {
@@ -2025,21 +2055,30 @@ function epcCalcMobile() {
     return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
   }
 
-  const billingHours = hours + 1; // +1 hr for 30min setup + 30min cleanup
+  const billingHours = hours + 1;
   const staff = epcStaff(guests);
   const rates = epcRates(billingHours);
   const base  = (staff.b*rates.br*billingHours) + (staff.h*rates.hr*billingHours);
-  const BLAT=41.7163, BLON=-88.2219;
 
-  fetch('https://api.zippopotam.us/us/'+zip)
-    .then(r => { if (!r.ok) throw new Error('ZIP "'+zip+'" not found.'); return r.json(); })
-    .then(data => {
-      const eLat    = parseFloat(data.places[0].latitude);
-      const eLon    = parseFloat(data.places[0].longitude);
-      const driveMi = Math.round(epcHav(BLAT,BLON,eLat,eLon)*1.25);
-      const travel  = Math.round(driveMi*2*0.55*(staff.b+staff.h));
-      const total   = Math.round(base+travel);
-      const city    = (data.places[0]['place name']||zip)+', '+(data.places[0]['state abbreviation']||'');
+  const eventFetch = fetch('https://api.zippopotam.us/us/'+zip).then(r => { if(!r.ok) throw new Error('Event ZIP "'+zip+'" not found.'); return r.json(); });
+  const originFetches = allOrigins.map(o => fetch('https://api.zippopotam.us/us/'+o.zip).then(r => { if(!r.ok) throw new Error('ZIP "'+o.zip+'" not found.'); return r.json(); }));
+
+  Promise.all([eventFetch, ...originFetches])
+    .then(([eventData, ...originResults]) => {
+      const eLat = parseFloat(eventData.places[0].latitude);
+      const eLon = parseFloat(eventData.places[0].longitude);
+      const city = (eventData.places[0]['place name']||zip)+', '+(eventData.places[0]['state abbreviation']||'');
+
+      const travelBreakdown = originResults.map((od, i) => {
+        const oLat = parseFloat(od.places[0].latitude);
+        const oLon = parseFloat(od.places[0].longitude);
+        const driveMi = Math.round(epcHav(oLat,oLon,eLat,eLon)*1.25);
+        const travelCost = Math.round(driveMi*2*ratePerMile);
+        const oCity = (od.places[0]['place name']||'')+', '+(od.places[0]['state abbreviation']||'');
+        return {name: allOrigins[i].name, oCity, driveMi, travelCost};
+      });
+      const totalTravel = travelBreakdown.reduce((s,t) => s+t.travelCost, 0);
+      const total = Math.round(base+totalTravel);
 
       let staffDisp = staff.b+' state licensed bartender'+(staff.b!==1?'s':'');
       if (staff.h>0) staffDisp += ' & '+staff.h+' helper'+(staff.h!==1?'s':'');
@@ -2053,17 +2092,24 @@ function epcCalcMobile() {
         +'Please do let us know if you have any questions. Thank you, -Alberto';
 
       const row = (l,v) => `<tr><td style="padding:6px 0;color:var(--ink3);font-size:14px;">${l}</td><td style="text-align:right;font-weight:600;font-size:14px;">${v}</td></tr>`;
+      const travelRows = travelBreakdown.map(t =>
+        row(`${safe(t.name)} (${safe(t.oCity)}, ~${t.driveMi} mi × 2 @ $${ratePerMile}/mi)`, '$'+t.travelCost)
+      ).join('');
+      const totalTravelRow = travelBreakdown.length>1
+        ? row(`<strong>Total travel (${travelBreakdown.length} staff)</strong>`, `<strong>$${totalTravel}</strong>`) : '';
+
       resultEl.innerHTML = `
         <div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface2);margin-bottom:12px;">
           <div style="font-size:15px;font-weight:700;margin-bottom:12px;">Price Breakdown</div>
           <table style="width:100%;border-collapse:collapse;">
             ${row('Guests', guests)}
             ${row('Duration', hours+' hrs')}
-            ${row('Staffing', staffDisp)}
+            ${row('Recommended staffing', staffDisp)}
             ${row('Rate', '$'+rates.br+'/hr bartender'+(staff.h>0?', $'+rates.hr+'/hr helper':''))}
             ${row('Base service', '$'+Math.round(base))}
             ${row('Venue', safe(city))}
-            ${row('Travel (~'+driveMi+' mi, '+(staff.b+staff.h)+' staff)', '$'+travel)}
+            ${travelRows}
+            ${totalTravelRow}
             <tr style="border-top:2px solid var(--border);">
               <td style="padding:12px 0 4px;font-size:17px;font-weight:700;">Total</td>
               <td style="text-align:right;font-size:17px;font-weight:700;color:#16a34a;padding-top:12px;">$${total}</td>
